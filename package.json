@@ -1,6 +1,6 @@
 {
   "name":"whatsapp-admin-bot",
-  "version":"2.2.0",
+  "version":"2.2.1",
   "private":true,
   "scripts":{"start":"node --require ./port-guard.js --require ./phone-resolver.js --require ./high-accuracy-ocr.js --require ./student-gate.js bot.js","check":"node --check bot.js && node --check port-guard.js && node --check phone-resolver.js && node --check high-accuracy-ocr.js && node --check student-gate.js && node --check lib/ocr-service.js && node --check lib/student-store.js"},
   "engines":{"node":">=22.13"},
