@@ -1,4 +1,5 @@
 node_modules/
+.ocr-venv/
 .wwebjs_auth/
 .wwebjs_cache/
 config.json
