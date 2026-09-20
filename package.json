@@ -1,10 +1,10 @@
 {
   "name":"whatsapp-admin-bot",
-  "version":"2.0.0",
+  "version":"2.0.1",
   "private":true,
   "scripts":{
-    "start":"node --require ./preload.js bot.js",
-    "check":"node --check bot.js && node --check preload.js && node --check lib/ocr-service.js && node --check lib/student-store.js"
+    "start":"node --require ./port-guard.js --require ./preload.js bot.js",
+    "check":"node --check bot.js && node --check port-guard.js && node --check preload.js && node --check lib/ocr-service.js && node --check lib/student-store.js"
   },
   "engines":{"node":">=22.13"},
   "dependencies":{
