@@ -1,17 +1,16 @@
 {
-  "name": "whatsapp-admin-bot",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Owner-controlled WhatsApp group moderation bot",
-  "main": "bot.js",
-  "scripts": {
-    "start": "node bot.js"
+  "name":"whatsapp-admin-bot",
+  "version":"2.0.0",
+  "private":true,
+  "scripts":{
+    "start":"node --require ./preload.js bot.js",
+    "check":"node --check bot.js && node --check preload.js && node --check lib/ocr-service.js && node --check lib/student-store.js"
   },
-  "engines": {
-    "node": ">=18"
-  },
-  "dependencies": {
-    "qrcode-terminal": "^0.12.0",
-    "whatsapp-web.js": "github:wwebjs/whatsapp-web.js#refs/pull/201850/head"
+  "engines":{"node":">=22.13"},
+  "dependencies":{
+    "qrcode-terminal":"^0.12.0",
+    "tesseract.js":"^6.0.1",
+    "whatsapp-web.js":"github:wwebjs/whatsapp-web.js#refs/pull/201850/head",
+    "xlsx":"^0.18.5"
   }
 }
