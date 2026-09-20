@@ -1,0 +1,13 @@
+node_modules/
+.wwebjs_auth/
+.wwebjs_cache/
+.env
+config.json
+*.log
+*.backup-*.js
+*.before-*.js
+*.before-*.json
+fix-*.js
+reset-bot-lists.js
+install-wa-compat-patch.js
+add-multi-blacklist-groups.js
