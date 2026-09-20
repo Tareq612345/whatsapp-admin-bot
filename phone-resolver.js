@@ -1,0 +1,9 @@
+const { Client } = require('whatsapp-web.js');
+const { StudentStore } = require('./lib/student-store');
+const phoneById = new Map();
+const pending = new Map();
+function digits(value){return String(value||'').replace(/\D/g,'');}
+async function resolvePhone(client,userId){const id=String(userId||'');if(!id)return'';if(id.endsWith('@c.us'))return digits(id);if(phoneById.has(id))return phoneById.get(id);if(pending.has(id))return pending.get(id);const promise=(async()=>{try{if(typeof client.getContactLidAndPhone==='function'){const result=await client.getContactLidAndPhone([id]),phoneId=result&&result[0]&&result[0].pn,number=digits(phoneId);if(number){phoneById.set(id,number);if(result[0].lid)phoneById.set(result[0].lid,number);return number;}}const contact=await client.getContactById(id),number=digits(contact?.number||contact?.id?._serialized);if(number&&!String(contact?.id?._serialized||'').endsWith('@lid')){phoneById.set(id,number);return number;}}catch(error){console.error(`[phone-resolver] تعذر تحويل ${id} إلى رقم: ${error.message}`);}finally{pending.delete(id);}return'';})();pending.set(id,promise);return promise;}
+const originalInsert=StudentStore.prototype.insert;StudentStore.prototype.insert=function insertWithResolvedPhone(record){const resolved=phoneById.get(String(record?.senderId||''));if(resolved)record={...record,senderNumber:resolved};return originalInsert.call(this,record);};
+const originalInitialize=Client.prototype.initialize;Client.prototype.initialize=function initializeWithPhoneResolver(...args){if(!this.__phoneResolverInstalled){this.__phoneResolverInstalled=true;this.prependListener('message',message=>{const from=String(message?.from||'');if(/@(c\.us|lid)$/.test(from))resolvePhone(this,from).catch(()=>{});});}return originalInitialize.apply(this,args);};
+module.exports={resolvePhone,phoneById};

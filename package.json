@@ -1,8 +1,8 @@
 {
   "name":"whatsapp-admin-bot",
-  "version":"2.1.2",
+  "version":"2.2.0",
   "private":true,
-  "scripts":{"start":"node --require ./port-guard.js --require ./student-gate.js bot.js","check":"node --check bot.js && node --check port-guard.js && node --check student-gate.js && node --check lib/ocr-service.js && node --check lib/student-store.js"},
+  "scripts":{"start":"node --require ./port-guard.js --require ./phone-resolver.js --require ./high-accuracy-ocr.js --require ./student-gate.js bot.js","check":"node --check bot.js && node --check port-guard.js && node --check phone-resolver.js && node --check high-accuracy-ocr.js && node --check student-gate.js && node --check lib/ocr-service.js && node --check lib/student-store.js"},
   "engines":{"node":">=22.13"},
   "dependencies":{"qrcode-terminal":"^0.12.0","tesseract.js":"^6.0.1","whatsapp-web.js":"github:wwebjs/whatsapp-web.js#refs/pull/201850/head","xlsx":"^0.18.5"}
 }
