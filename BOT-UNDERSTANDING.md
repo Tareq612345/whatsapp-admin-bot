@@ -61,6 +61,7 @@ The load order matters because several files patch shared runtime behavior befor
 3. `rapid-ocr.js`
    - Replaces `ocr-service.recognizeImage` with RapidOCR first and Tesseract fallback.
    - Starts a Python worker lazily when the first image is processed.
+   - Calls `ocr.parseStudentCard(text)` on the recognized text, so any parsing fields added to `lib/ocr-service.js` automatically flow through this active path.
 
 4. `student-gate.js`
    - Patches `Client.prototype.initialize`.
@@ -148,7 +149,7 @@ Main fields:
 - `rules`
 - `logs`
 
-Each rule connects a WhatsApp group to one or more keywords. A single matching rule can produce a verified result; multiple matches are sent for review because the correct target group is ambiguous.
+Each rule connects a WhatsApp group to one or more keywords. A single matching rule can produce a verified result; multiple matches are sent for review because the correct target group is ambiguous. Rule matching runs on the normalized full OCR text, not only on the extracted fields, so a keyword such as a program/department name will match even when it is not parsed into its own field.
 
 ### WhatsApp session
 
@@ -163,6 +164,8 @@ Each rule connects a WhatsApp group to one or more keywords. A single matching r
 - Created by `lib/student-store.js`.
 - Uses SQLite WAL mode and a busy timeout.
 - Schema includes verification status, sender identity, file hash, OCR text/confidence, extracted student fields, matched rule/group, decision reason, and review time.
+- Extracted student-field columns: `student_name`, `national_id`, `college`, `cohort`, `academic_year`, and (added 2026-09-23) `student_code`, `program`, `level`.
+- `migrate()` additively adds any missing columns on startup, so an existing database gains the new columns automatically without data loss.
 
 ### Ignored files
 
@@ -259,16 +262,20 @@ The image is hashed with SHA-256. A matching hash from a different sender is rec
 - Arabic/English Tesseract worker support.
 - Arabic character normalization.
 - Arabic and Persian digit conversion.
-- Student-card field extraction.
-- National-ID extraction when a 14-digit value is found.
+- Student-card field extraction (card layout): `اسم الطالب`, `الكليه`, `الفرقه`, and academic year.
+- Schedule/portal field extraction (added 2026-09-23): `الاسم`, `البرنامج` (program), `الكود` (student code), `المستوي` (level). The `labelValue()` helper reads a value either after a colon on the same line or from the next non-empty line, so both the plastic-card layout and the online-schedule layout are supported.
+- National-ID extraction when a 14-digit value is found; when no national ID is present (typical for schedule screenshots), `student_code` falls back to the first 6–12 digit number.
 - Keyword normalization and matching.
 - SHA-256 helper.
+
+Note: schedule screenshots usually have no national ID, so the program name is the value that distinguishes the department. Group rules for a department should match on the program keyword (for example `الذكاء الاصطناعي`).
 
 The currently active OCR wrapper is `rapid-ocr.js`:
 
 - Uses `.ocr-venv` Python when available.
 - Starts `ocr/rapid_worker.py`.
 - Uses Arabic PP-OCRv5 through RapidOCR/ONNX Runtime.
+- Calls `ocr.parseStudentCard` on the recognized text, so it produces the same structured fields as the Tesseract path.
 - Falls back to Tesseract when the Python environment, worker, or OCR request fails.
 
 ### High-accuracy OCR status
@@ -342,7 +349,7 @@ Main endpoints:
 - `GET /api/export`
 - `POST /api/action`
 
-It controls OCR settings, rules, review decisions, and Excel export.
+It controls OCR settings, rules, review decisions, and Excel export. The records list and the Excel export also show `student_code`, `program`, and `level` (added 2026-09-23); the records field grid uses four columns to fit the added tiles.
 
 Both dashboards bind to `127.0.0.1`, which limits normal network exposure to the local machine. They currently do not implement user authentication, CSRF protection, or a separate authorization layer.
 
@@ -368,7 +375,7 @@ Both dashboards bind to `127.0.0.1`, which limits normal network exposure to the
 
 5. **Auto-approval false positives**
    - OCR and keyword matching can produce false matches.
-   - Keep both dry-run settings enabled during testing and consider requiring stronger identity/request validation before live approval.
+   - Schedule screenshots normally lack a national ID, so identity is weaker; keep dry-run enabled during testing and consider requiring stronger identity/request validation before live approval.
 
 6. **In-memory queue**
    - Pending image jobs disappear on restart.
@@ -483,6 +490,14 @@ When reviewing a proposed change, explicitly check:
 - Identified the active RapidOCR path and the inactive-by-default Ollama high-accuracy path.
 - Identified the nested legacy copy.
 - Recorded privacy, authentication, auto-approval, queue durability, configuration, and maintenance risks.
+
+### 2026-09-23 — Save and display schedule fields (student code / program / level)
+
+- What changed: OCR parsing now also extracts `student_code` (`الكود`), `program` (`البرنامج`), and `level` (`المستوي`/`المستوى`) from university-schedule/portal screenshots, in addition to the existing student-card fields. These fields are saved to SQLite, shown in the Student Gate dashboard, added to the owner review notification, and included in the Excel export.
+- Why: users submit the online schedule page (labels `الاسم` / `البرنامج` / `الكود` / `المستوى`), which previously produced “اسم غير واضح” and no college/department because the parser only understood the plastic-card layout and required a 14-digit national ID.
+- Files affected: `lib/ocr-service.js` (new `labelValue()` helper + schedule labels; returns `studentCode`/`program`/`level`), `lib/student-store.js` (new `student_code`/`program`/`level` columns, additive `migrate()`, insert + Excel export), `student-gate.js` (persists the new fields, adds them to the owner review caption and OCR log), `dashboard-v2.html` (three new field tiles, records grid switched to four columns).
+- How it was tested: `node --check` on all three JS files; a standalone parser test confirmed extraction from both the same-line-colon and label-then-next-line schedule layouts, backward compatibility with the old card layout, and that `matchRules` still matches on the program keyword `الذكاء الاصطناعي`; the dashboard inline script was syntax-validated.
+- New risk / operational note: schedule screenshots normally lack a national ID, so identity is weaker — keep Student Gate `dryRun` on until verified, and prefer a rule whose keyword is the exact program/department name. To go live for a department group: add a rule with keyword `الذكاء الاصطناعي` (plus backup wordings), then set Student Gate `dryRun=false` with `autoApprove=true`.
 
 ### Future entries
 
