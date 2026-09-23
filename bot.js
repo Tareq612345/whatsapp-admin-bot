@@ -351,6 +351,54 @@ async function syncBlocked(targetOnly = null) {
   return result;
 }
 
+async function clearGroup(chat) {
+  const result = { total: 0, removed: 0, wouldRemove: 0, kept: 0 };
+  if (!chat) return result;
+  const ownerKey = digits(config.ownerNumber);
+  const botKey = personKey(botId());
+  const ownerLids = (config.ownerLids || []).map(digits);
+  const adminKeys = new Set(
+    (chat.participants || [])
+      .filter(person => person && (person.isAdmin || person.isSuperAdmin))
+      .map(person => personKey(person.id || person))
+  );
+  const all = participantIds(chat);
+  result.total = all.length;
+  const victims = all.filter(id => {
+    const key = personKey(id);
+    if (key === botKey) return false;
+    if (ownerKey && key === ownerKey) return false;
+    if (ownerLids.includes(key)) return false;
+    if (adminKeys.has(key)) return false;
+    return true;
+  });
+  result.kept = result.total - victims.length;
+  if (!victims.length) return result;
+
+  if (config.dryRun) {
+    result.wouldRemove = victims.length;
+    addLog('dry_run_clear_group', `${chat.name}: ${victims.length} member(s)`);
+    return result;
+  }
+
+  if (!(await isBotAdmin(chat))) {
+    addLog('clear_group_skipped', `${chat.name}: bot is not admin`);
+    return result;
+  }
+
+  for (let i = 0; i < victims.length; i += 25) {
+    const batch = victims.slice(i, i + 25);
+    try {
+      await chat.removeParticipants(batch);
+      result.removed += batch.length;
+    } catch (error) {
+      addLog('clear_group_error', `${chat.name}: ${error.message}`);
+    }
+  }
+  addLog('cleared_group', `${chat.name}: removed ${result.removed}/${result.total}`);
+  return result;
+}
+
 function requestJid(request) {
   const raw = request?.requesterId || request?.id || request?.requester;
   if (!raw) return null;
@@ -427,6 +475,7 @@ function helpText() {
 الجروب:
 !lock  !unlock  !lock-duration 5
 !rate-limit 25 60  |  !rate-limit off
+!clear-group تأكيد  (يطرد كل الأعضاء عدا الأدمن)
 
 المحظورون:
 !set-blocked-group  !add-target  !remove-target
@@ -627,6 +676,18 @@ Dry-run: ${config.dryRun ? 'ON' : 'OFF'}
         const found = participantIds(chat).some(id => personKey(id) === digits(number));
         return reply(message, found ? 'العضو موجود في الجروب.' : 'العضو غير موجود في الجروب.');
       }
+      case '!clear-group':
+      case '!purge-group': {
+        const chat = await getChatFromMessage(message);
+        if (!chat) return;
+        if (!(await isBotAdmin(chat))) return reply(message, 'رقم البوت ليس Admin في هذا الجروب.');
+        if ((args[1] || '') !== 'تأكيد') {
+          return reply(message, `⚠️ سيتم طرد كل الأعضاء (عدا الأدمن والمالك والبوت) من "${chat.name}".\nعدد الأعضاء الحاليين: ${chat.participants.length}\nللتأكيد اكتب:\n!clear-group تأكيد`);
+        }
+        const result = await clearGroup(chat);
+        if (config.dryRun) return reply(message, `Dry-run مفعّل؛ المتوقّع طرده: ${result.wouldRemove} من ${result.total}. لم يتم تنفيذ شيء فعليًا.`);
+        return reply(message, `تم تصفية الجروب. تم طرد ${result.removed} من ${result.total}. تم الإبقاء على ${result.kept} (أدمن/مالك/بوت).`);
+      }
       case '!remove':
       case '!promote':
       case '!demote': {
@@ -772,6 +833,7 @@ function startLocalDashboard() {
     if (data.action === 'syncBlocked') { const r = await syncBlocked(); return 'اكتمل الفحص: ' + r.removed + ' إزالة، ' + r.wouldRemove + ' في Dry-run'; }
     if (data.action === 'approvePending') { const r = await processMembershipRequests(); return 'الطلبات: ' + r.approved + ' قبول، ' + r.rejected + ' رفض'; }
     if (data.action === 'rejectBlocked') { const r = await processMembershipRequests({ onlyBlocked: true }); return 'تم رفض ' + r.rejected + ' طلب محظور'; }
+    if (data.action === 'clearGroup') { const group = await groupById(data.groupId); if (!group) return 'تعذر تحميل الجروب'; const r = await clearGroup(group); if (config.dryRun) return 'Dry-run: المتوقّع طرده ' + r.wouldRemove + ' من ' + r.total; return 'تم طرد ' + r.removed + ' من ' + r.total + ' (تم الإبقاء على ' + r.kept + ')'; }
     throw new Error('إجراء غير معروف');
   };
   const server = http.createServer(async (req, res) => {
