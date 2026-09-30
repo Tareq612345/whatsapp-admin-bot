@@ -1,17 +1,29 @@
 # WhatsApp Admin Bot
 
+[![Windows release validation](https://github.com/Tareq612345/whatsapp-admin-bot/actions/workflows/windows-release.yml/badge.svg)](https://github.com/Tareq612345/whatsapp-admin-bot/actions/workflows/windows-release.yml)
+[![Latest release](https://img.shields.io/github/v/release/Tareq612345/whatsapp-admin-bot?include_prereleases&label=release)](https://github.com/Tareq612345/whatsapp-admin-bot/releases)
+[![Windows](https://img.shields.io/badge/Windows-10%2F11-287fd1)](https://github.com/Tareq612345/whatsapp-admin-bot/releases)
+[![Node.js](https://img.shields.io/badge/Node.js-22.13%2B-46a171)](package.json)
+
 A local WhatsApp group-management bot with message-rate protection, reusable block/allow lists, membership-request automation, student-card OCR, review dashboards, and Excel exports.
+
+> **Early access:** `v0.1.0` is the first public pre-release. It is suitable for controlled testing on Windows, but the installer is not code-signed yet and Windows SmartScreen may display a warning.
+
+## Download
+
+Download the latest Windows installer from [GitHub Releases](https://github.com/Tareq612345/whatsapp-admin-bot/releases/latest). The release pipeline builds on `windows-latest`, runs the packaged start/stop/restart smoke test, verifies OCR files, and publishes the installer only after every check passes.
 
 ## Available editions
 
-- [`main`](../../tree/main) contains the current Windows Desktop / EXE edition.
-- [`classic-cli`](../../tree/classic-cli) preserves the previous command-line edition that runs with `npm start`.
+- [`main`](https://github.com/Tareq612345/whatsapp-admin-bot/tree/main) contains the current Windows Desktop / EXE edition.
+- [`desktop-app`](https://github.com/Tareq612345/whatsapp-admin-bot/tree/desktop-app) is the named Desktop branch.
+- [`classic-cli`](https://github.com/Tareq612345/whatsapp-admin-bot/tree/classic-cli) preserves the previous command-line edition that runs with `npm start`.
 
 The classic branch remains available independently while Desktop development continues on `main`.
 
 ## Windows desktop application
 
-Version 3 introduces **WhatsApp Admin Studio**, an Electron desktop interface that can be packaged as a Windows EXE installer.
+Version `0.1.x` introduces **WhatsApp Admin Studio**, an Electron desktop interface packaged as a Windows EXE installer.
 
 ```powershell
 npm install
