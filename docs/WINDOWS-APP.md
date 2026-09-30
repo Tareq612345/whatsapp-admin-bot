@@ -127,6 +127,10 @@ Changes to administrators and commands are reloaded by the running bot automatic
 
 When launched by Studio, the bot writes structured events to standard output. Studio recognizes QR, ready, disconnected, and authentication-failure events. The QR value is rendered locally and is not sent to an external service.
 
+On first launch, Studio displays a guided QR sign-in panel and opens the QR dialog when the code is ready. In WhatsApp, open **Linked devices → Link a device** and scan the code. The desktop status changes from login required, to loading, to connected.
+
+The authenticated WhatsApp session is stored under Electron's stable user-data directory in `.wwebjs_auth/`. It is outside the installation directory, and the NSIS configuration keeps application data during uninstall. Installing a newer version over the existing version therefore reuses the same session automatically. A new QR is needed only when WhatsApp invalidates the linked device, the user logs it out, or the application-data folder is removed.
+
 ## Before public distribution
 
 The application can be built and tested without signing, but Windows may display a SmartScreen warning. For broad distribution:

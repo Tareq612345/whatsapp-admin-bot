@@ -2,6 +2,8 @@ const state = {
   admins: null,
   commands: null,
   bot: { status: 'starting' },
+  auth: { status: 'starting', qrDataUrl: null },
+  lastShownQr: null,
   logs: []
 };
 
@@ -67,13 +69,57 @@ function renderStatus(bot) {
   const error = ['error', 'stopped'].includes(status);
   $('#sidebarDot').className = `status-dot ${ready ? 'ready' : error ? 'error' : ''}`;
   $('#sidebarStatus').textContent = titleCase(status);
-  $('#sidebarDetail').textContent = ready ? `Process ${bot.pid || ''}` : status === 'reconnecting' ? 'Trying to reconnect' : 'WhatsApp engine';
+  $('#sidebarDetail').textContent = ready
+    ? `Process ${bot.pid || ''}`
+    : status === 'waiting-login'
+      ? 'Login required'
+      : status === 'reconnecting'
+        ? 'Trying to reconnect'
+        : 'WhatsApp engine';
   $('#heroBadge').textContent = titleCase(status);
   $('#heroBadge').className = `status-badge ${ready ? 'ready' : ''}`;
   $('#connectionPercent').textContent = ready ? '✓' : '···';
   $('#connectionTitle').textContent = ready ? 'Connected' : titleCase(status);
   $('#connectionHint').textContent = ready ? 'WhatsApp is ready' : 'Waiting for WhatsApp';
   $('#metricConnection').textContent = titleCase(status);
+}
+
+function showQrDialog() {
+  if (!state.auth?.qrDataUrl) return;
+  $('#qrImage').src = state.auth.qrDataUrl;
+  if (!$('#qrDialog').open) $('#qrDialog').showModal();
+}
+
+function renderAuth(auth = {}) {
+  state.auth = { ...state.auth, ...auth };
+  const status = state.auth.status || 'starting';
+  const ready = status === 'ready';
+  const failed = ['auth-failure', 'stopped'].includes(status);
+  const hasQr = status === 'qr' && Boolean(state.auth.qrDataUrl);
+  const titles = {
+    starting: 'Checking your saved session',
+    qr: 'WhatsApp login required',
+    authenticated: 'Login accepted',
+    loading: 'Loading your WhatsApp account',
+    ready: 'WhatsApp connected',
+    disconnected: 'Connection interrupted',
+    'auth-failure': 'Could not use the saved session',
+    stopped: 'WhatsApp engine stopped'
+  };
+
+  $('#loginPanel').className = `login-panel${ready ? ' connected' : ''}${failed ? ' error' : ''}`;
+  $('#loginEyebrow').textContent = ready ? 'CONNECTION' : 'WHATSAPP SETUP';
+  $('#loginTitle').textContent = titles[status] || titleCase(status);
+  $('#loginMessage').textContent = state.auth.message || 'Waiting for WhatsApp…';
+  $('#showQr').disabled = !hasQr;
+  $('#showQr').textContent = hasQr ? 'Show QR code' : ready ? 'Connected' : 'Waiting for QR…';
+  $('#retryLogin').hidden = ready || hasQr || ['authenticated', 'loading'].includes(status);
+
+  if (hasQr && state.lastShownQr !== state.auth.qrDataUrl) {
+    state.lastShownQr = state.auth.qrDataUrl;
+    showQrDialog();
+  }
+  if (ready && $('#qrDialog').open) $('#qrDialog').close();
 }
 
 function renderMetrics(autoStart) {
@@ -180,6 +226,11 @@ function bindEvents() {
   $('#openDashboard').addEventListener('click', () => window.studio.openDashboard(3000));
   $('#openStudentGate').addEventListener('click', () => window.studio.openDashboard(3001));
   $('#restartBot').addEventListener('click', async () => { await window.studio.restartBot(); toast('Bot restarted'); });
+  $('#showQr').addEventListener('click', showQrDialog);
+  $('#retryLogin').addEventListener('click', async () => {
+    renderAuth({ status: 'starting', message: 'Restarting the WhatsApp connection…', qrDataUrl: null });
+    await window.studio.restartBot();
+  });
   $('#startBot').addEventListener('click', () => window.studio.startBot());
   $('#stopBot').addEventListener('click', () => window.studio.stopBot());
   $('#openData').addEventListener('click', () => window.studio.openDataFolder());
@@ -260,6 +311,7 @@ async function initialize() {
   state.commands = commands;
   state.logs = desktopState.logs || [];
   renderStatus(desktopState.bot);
+  renderAuth(desktopState.auth);
   renderMetrics(desktopState.autoStart);
   renderAdmins();
   renderPermissions();
@@ -279,10 +331,13 @@ async function initialize() {
   });
   window.studio.onBotEvent(event => {
     if (event.type === 'qr' && event.dataUrl) {
-      $('#qrImage').src = event.dataUrl;
-      if (!$('#qrDialog').open) $('#qrDialog').showModal();
+      renderAuth({ status: 'qr', qrDataUrl: event.dataUrl, message: 'Scan the QR code with the WhatsApp account that will run the bot.' });
     }
-    if (event.type === 'ready' && $('#qrDialog').open) $('#qrDialog').close();
+    if (event.type === 'authenticated') renderAuth({ status: 'authenticated', qrDataUrl: null, message: 'Login accepted. Loading your WhatsApp account…' });
+    if (event.type === 'loading') renderAuth({ status: 'loading', qrDataUrl: null, message: event.message || 'Loading WhatsApp…' });
+    if (event.type === 'ready') renderAuth({ status: 'ready', qrDataUrl: null, message: 'WhatsApp is connected. Your saved session will be reused automatically.' });
+    if (event.type === 'auth-failure') renderAuth({ status: 'auth-failure', qrDataUrl: null, message: event.message || 'WhatsApp rejected the saved session. Try connecting again.' });
+    if (event.type === 'disconnected') renderAuth({ status: 'disconnected', qrDataUrl: null, message: 'Connection lost. Studio is trying to reconnect…' });
   });
 }
 

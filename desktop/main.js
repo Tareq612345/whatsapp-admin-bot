@@ -4,6 +4,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const QRCode = require('qrcode');
+const { createLineDecoder } = require('../lib/desktop-events');
 
 let mainWindow;
 let whatsappWindow;
@@ -11,6 +12,12 @@ let botProcess;
 let botStartPromise;
 let botHostLock;
 let botState = { status: 'stopped', pid: null, startedAt: null, lastExit: null };
+let authState = {
+  status: 'starting',
+  qrDataUrl: null,
+  message: 'Starting the WhatsApp connection…',
+  updatedAt: new Date().toISOString()
+};
 const logs = [];
 const isBotHost = process.argv.includes('--bot-host');
 const isSmokeTest = process.argv.includes('--smoke-test');
@@ -118,15 +125,66 @@ function addLog(source, text) {
   send('bot-log', entry);
 }
 
+function setAuthState(status, updates = {}) {
+  authState = {
+    ...authState,
+    ...updates,
+    status,
+    updatedAt: new Date().toISOString()
+  };
+}
+
 async function processDesktopEvent(line) {
   const marker = '[desktop-event] ';
   const index = line.indexOf(marker);
   if (index < 0) return;
   try {
     const event = JSON.parse(line.slice(index + marker.length));
-    if (event.type === 'qr') event.dataUrl = await QRCode.toDataURL(event.value, { width: 300, margin: 2 });
-    if (event.type === 'ready') botState.status = 'ready';
-    if (event.type === 'disconnected') botState.status = 'reconnecting';
+    if (event.type === 'qr') {
+      event.dataUrl = await QRCode.toDataURL(event.value, { width: 320, margin: 2 });
+      botState.status = 'waiting-login';
+      setAuthState('qr', {
+        qrDataUrl: event.dataUrl,
+        message: 'Scan the QR code with the WhatsApp account that will run the bot.'
+      });
+    }
+    if (event.type === 'authenticated') {
+      botState.status = 'connecting';
+      setAuthState('authenticated', {
+        qrDataUrl: null,
+        message: 'Login accepted. Loading your WhatsApp account…'
+      });
+    }
+    if (event.type === 'loading') {
+      botState.status = 'connecting';
+      setAuthState('loading', {
+        qrDataUrl: null,
+        percent: event.percent,
+        message: event.message || 'Loading WhatsApp…'
+      });
+    }
+    if (event.type === 'ready') {
+      botState.status = 'ready';
+      setAuthState('ready', {
+        qrDataUrl: null,
+        percent: 100,
+        message: 'WhatsApp is connected. Your saved session will be reused automatically.'
+      });
+    }
+    if (event.type === 'auth-failure') {
+      botState.status = 'error';
+      setAuthState('auth-failure', {
+        qrDataUrl: null,
+        message: event.message || 'WhatsApp rejected the saved session. Try connecting again.'
+      });
+    }
+    if (event.type === 'disconnected') {
+      botState.status = 'reconnecting';
+      setAuthState('disconnected', {
+        qrDataUrl: null,
+        message: `Connection lost${event.reason ? `: ${event.reason}` : ''}. Reconnecting…`
+      });
+    }
     send('bot-event', event);
     send('bot-status', botState);
   } catch (error) {
@@ -172,6 +230,11 @@ async function startBot() {
   botStartPromise = (async () => {
     ensureUserFiles();
     botState = { status: 'starting', pid: null, startedAt: new Date().toISOString(), lastExit: null };
+    setAuthState('starting', {
+      qrDataUrl: null,
+      percent: null,
+      message: 'Checking for a saved WhatsApp session…'
+    });
     send('bot-status', botState);
     await cleanupOrphanBotHosts();
     if (botProcess) return botState;
@@ -189,10 +252,12 @@ async function startBot() {
     botProcess = child;
     botState.pid = child.pid;
     send('bot-status', botState);
+    const desktopEventDecoder = createLineDecoder(line => {
+      processDesktopEvent(line);
+      if (!line.includes('[desktop-event]')) addLog('bot', line);
+    });
     child.stdout.on('data', chunk => {
-      const text = chunk.toString();
-      addLog('bot', text);
-      for (const line of text.split(/\r?\n/)) processDesktopEvent(line);
+      desktopEventDecoder.push(chunk);
     });
     child.stderr.on('data', chunk => addLog('error', chunk.toString()));
     child.on('error', error => {
@@ -203,8 +268,15 @@ async function startBot() {
       send('bot-status', botState);
     });
     child.on('exit', (code, signal) => {
+      desktopEventDecoder.flush();
       if (botProcess !== child) return;
       botState = { ...botState, status: 'stopped', pid: null, lastExit: { code, signal, at: new Date().toISOString() } };
+      if (authState.status !== 'ready') {
+        setAuthState('stopped', {
+          qrDataUrl: null,
+          message: 'The WhatsApp engine stopped before it connected.'
+        });
+      }
       botProcess = null;
       send('bot-status', botState);
     });
@@ -375,6 +447,7 @@ process.once('exit', releaseBotHostLock);
 
 ipcMain.handle('studio:get-state', () => ({
   bot: botState,
+  auth: authState,
   logs,
   autoStart: app.getLoginItemSettings().openAtLogin,
   version: app.getVersion(),

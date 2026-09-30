@@ -16,3 +16,22 @@ This append-only file records AI-assisted repository changes, their validation, 
   - Runtime tests: NOT RUN — documentation/instruction-only change
 - **Result:** SUCCESS
 - **Known limitations/follow-up:** Instruction compliance still depends on each external agent reading the supported repository instruction file.
+
+## 2026-09-30 — Add reliable in-app WhatsApp sign-in
+
+- **Agent/tool:** Notion AI with GitHub MCP and local validation
+- **Request:** Show a professional first-run WhatsApp QR login, preserve the session across updates, and clearly communicate connection state.
+- **Branch/PR:** `feature/in-app-whatsapp-login` / #12
+- **Scope:** Added buffered desktop-event parsing, authentication lifecycle events, cached QR state, a guided in-app login panel/dialog, session persistence documentation, and regression tests; no command, permission, or OCR behavior changed.
+- **Files:** `bot.js`, `desktop/main.js`, `desktop/renderer.js`, `desktop/index.html`, `desktop/styles.css`, `lib/desktop-events.js`, `test/desktop-events.test.js`, `package.json`, `docs/WINDOWS-APP.md`, `AI-CHANGELOG.md`
+- **Behavior:** First-time users are prompted to scan a QR inside Studio; existing users reuse the LocalAuth session stored in the Windows user-data directory after restarts and version updates.
+- **Validation:**
+  - `npm run check`: PASS — all application and desktop JavaScript passed syntax validation
+  - `npm test`: PASS — 14 tests passed, including split and multi-line desktop-event regression tests
+  - `git diff --check`: PASS — no whitespace errors
+  - Desktop visual QA at 1440×900: PASS — QR dialog is centered, readable, and free of clipping or overlap
+  - Minimum-window visual QA at 1040×680: PASS — QR instructions and controls remain readable within the supported window
+  - GitHub `validate-windows` workflow: PASS — packaged Windows smoke and validation job completed successfully
+  - Real WhatsApp QR scan and update reuse: NOT RUN — requires a human WhatsApp account
+- **Result:** PARTIAL
+- **Known limitations/follow-up:** The Windows workflow must validate the packaged application. A human must complete one real WhatsApp scan and upgrade test because CI cannot authenticate a WhatsApp account.

@@ -67,6 +67,15 @@ p { color: var(--muted); }
 .connection-ring { width: 68px; height: 68px; border-radius: 50%; border: 7px solid #dbece1; border-top-color: var(--green); display: grid; place-items: center; margin-bottom: 10px; }
 .connection-card strong, .connection-card span { display: block; }
 .connection-card > span { color: var(--muted); font-size: 12px; }
+.login-panel { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; margin: 18px 0; padding: 18px 20px; border: 1px solid #cfe5d8; border-radius: 10px; background: #f5faf7; }
+.login-panel.connected { border-color: var(--border); background: var(--surface); }
+.login-panel.error { border-color: #f0cfcb; background: #fff8f7; }
+.login-panel[hidden] { display: none; }
+.login-icon { width: 46px; height: 46px; border-radius: 10px; display: grid; place-items: center; background: var(--green-soft); }
+.login-icon svg { width: 28px; fill: var(--green); }
+.login-copy h3, .login-copy p { margin-bottom: 2px; }
+.login-copy small { color: var(--muted); }
+.login-actions { display: flex; gap: 8px; }
 .metric-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin: 18px 0; }
 .metric, .panel, .admin-card, .role-card, .command-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.025); }
 .metric { padding: 18px; }
@@ -152,8 +161,17 @@ dialog::backdrop { background: rgba(25,25,25,.44); backdrop-filter: blur(2px); }
 .dialog-head { display: flex; justify-content: space-between; }
 .icon-button { width: 38px; height: 38px; border: 0; border-radius: 8px; background: var(--surface-soft); font-size: 22px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
-.qr-content { text-align: center; }
-.qr-content img { display: block; width: 300px; height: 300px; margin: 16px auto; }
+.qr-content { text-align: left; }
+.qr-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.qr-layout { display: grid; grid-template-columns: 320px 1fr; gap: 26px; align-items: center; margin-top: 18px; }
+.qr-frame { padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+.qr-content img { display: block; width: 300px; height: 300px; }
+.qr-steps { display: grid; gap: 18px; margin: 0; padding: 0; list-style: none; }
+.qr-steps li { display: grid; grid-template-columns: 30px 1fr; gap: 10px; align-items: start; }
+.qr-steps li > span { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--green); background: var(--green-soft); font-weight: 750; }
+.qr-steps strong, .qr-steps small { display: block; }
+.qr-steps small { margin-top: 3px; color: var(--muted); }
+.session-note { margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--border); font-size: 13px; }
 .toast { position: fixed; right: 28px; bottom: 28px; max-width: 380px; padding: 12px 16px; border-radius: 9px; background: #242523; color: #fff; opacity: 0; transform: translateY(12px); pointer-events: none; transition: .2s; z-index: 50; }
 .toast.show { opacity: 1; transform: translateY(0); }
 @media (max-width: 1120px) {
@@ -161,6 +179,8 @@ dialog::backdrop { background: rgba(25,25,25,.44); backdrop-filter: blur(2px); }
   .card-grid, .role-grid, .settings-grid { grid-template-columns: repeat(2,1fr); }
   .command-card { grid-template-columns: 190px 1fr; }
   .command-card label:last-child { grid-column: 1/-1; }
+  .login-panel { grid-template-columns: auto 1fr; }
+  .login-actions { grid-column: 1/-1; padding-left: 62px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
