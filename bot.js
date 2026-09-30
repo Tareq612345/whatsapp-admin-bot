@@ -738,6 +738,15 @@ client.on('qr', qr => {
   qrcode.generate(qr, { small: true });
 });
 
+client.on('authenticated', () => {
+  desktopEvent('authenticated');
+  console.log('WhatsApp login accepted. Loading the account...');
+});
+
+client.on('loading_screen', (percent, message) => {
+  desktopEvent('loading', { percent: Number(percent) || 0, message: String(message || '') });
+});
+
 client.on('ready', () => {
   desktopEvent('ready');
   console.log('WhatsApp Admin Bot جاهز.');
