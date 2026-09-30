@@ -1,8 +1,8 @@
-const fs=require('fs'),path=require('path'),http=require('http'),{URL}=require('url'),{Client}=require('whatsapp-web.js');
+const fs=require('fs'),path=require('path'),http=require('http'),{URL}=require('url'),{Client}=require('./lib/whatsapp-library');
 const{StudentStore}=require('./lib/student-store');const{recognizeImage,matchRules,sha256}=require('./lib/ocr-service');const lifecycle=require('./lib/lifecycle');
-const ROOT=__dirname,CONFIG_FILE=path.join(ROOT,'verification-config.json'),MAIN_CONFIG_FILE=path.join(ROOT,'config.json'),DASHBOARD_FILE=path.join(ROOT,'dashboard-v2.html'),defaults={enabled:true,autoApprove:true,dryRun:true,minConfidence:55,maxQueue:200,rules:[],logs:[]};
+const ROOT=__dirname,DATA_ROOT=process.env.BOT_DATA_DIR||ROOT,CONFIG_FILE=path.join(DATA_ROOT,'verification-config.json'),MAIN_CONFIG_FILE=path.join(DATA_ROOT,'config.json'),DASHBOARD_FILE=path.join(ROOT,'dashboard-v2.html'),defaults={enabled:true,autoApprove:true,dryRun:true,minConfidence:55,maxQueue:200,rules:[],logs:[]};
 let config=(()=>{try{return{...defaults,...JSON.parse(fs.readFileSync(CONFIG_FILE,'utf8'))};}catch{return{...defaults};}})();
-const save=()=>fs.writeFileSync(CONFIG_FILE,JSON.stringify(config,null,2)),store=new StudentStore(ROOT),groups=new Map(),processed=new Set(),queue=[];let queueRunning=false,lastQueueAlertAt=0;
+const save=()=>fs.writeFileSync(CONFIG_FILE,JSON.stringify(config,null,2)),store=new StudentStore(DATA_ROOT),groups=new Map(),processed=new Set(),queue=[];let queueRunning=false,lastQueueAlertAt=0;
 const sid=v=>typeof v==='string'?v:v?._serialized||v?.$1||v?.user||'',key=v=>String(sid(v)).replace(/\D/g,''),requestId=r=>sid(r?.id)||sid(r?.requesterId)||sid(r?.requester),isPrivateUser=id=>/@(c\.us|lid)$/.test(String(id||''));
 function log(action,details){config.logs.push({at:new Date().toISOString(),action,details:String(details||'')});config.logs=config.logs.slice(-300);save();console.log(`[student-gate] ${action}: ${details}`);}
 function ownerChatId(){let ownerNumber=config.ownerNumber||'201040224684';try{const mainConfig=JSON.parse(fs.readFileSync(MAIN_CONFIG_FILE,'utf8'));ownerNumber=mainConfig.ownerNumber||ownerNumber;}catch{}const number=String(ownerNumber).replace(/\D/g,'');return number?`${number}@c.us`:null;}

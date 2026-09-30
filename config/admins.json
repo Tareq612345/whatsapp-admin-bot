@@ -1,8 +1,39 @@
 {
-  "numbers": [
-    "201040224684"
+  "roles": {
+    "owner": {
+      "label": "Owner",
+      "description": "Full access to every command",
+      "allowedCommands": ["*"]
+    },
+    "admin": {
+      "label": "Administrator",
+      "description": "Group operations without destructive bulk removal",
+      "allowedCommands": [
+        "help", "ping", "status", "groups", "logs", "group-info",
+        "lock", "unlock", "lock-duration", "rate-limit", "check-number",
+        "scan-group", "member-check", "approve-pending", "reject-blocked"
+      ]
+    },
+    "moderator": {
+      "label": "Moderator",
+      "description": "Basic status and group moderation",
+      "allowedCommands": ["help", "ping", "status", "group-info", "lock", "unlock", "member-check"]
+    }
+  },
+  "admins": [
+    {
+      "id": "primary-owner",
+      "name": "Primary owner",
+      "number": "201040224684",
+      "lids": ["35816386629826"],
+      "role": "owner",
+      "enabled": true,
+      "allowedCommands": [],
+      "deniedCommands": []
+    }
   ],
-  "lids": [
-    "35816386629826"
-  ]
+  "members": {
+    "enabled": true,
+    "allowedCommands": ["help", "ping"]
+  }
 }

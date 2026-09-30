@@ -1,5 +1,5 @@
 const fs=require('fs'),path=require('path'),http=require('http'),{URL}=require('url');
-const{Client}=require('whatsapp-web.js');
+const{Client}=require('./lib/whatsapp-library');
 const{StudentStore}=require('./lib/student-store');
 const{recognizeImage,matchRules,sha256}=require('./lib/ocr-service');
 const ROOT=__dirname,FILE=path.join(ROOT,'verification-config.json'),HTML=path.join(ROOT,'dashboard-v2.html');

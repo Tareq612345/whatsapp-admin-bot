@@ -1,12 +1,21 @@
 const fs = require('fs');
 const path = require('path');
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth } = require('./lib/whatsapp-library');
 const qrcode = require('qrcode-terminal');
 const { AdminAccess } = require('./lib/admin-access');
+const { CommandConfig } = require('./lib/command-config');
 const { RuntimeManager } = require('./lib/runtime-manager');
 const { startAdminDashboard } = require('./lib/admin-dashboard');
 
-const CONFIG_PATH = path.join(__dirname, 'config.json');
+const RUNTIME_DIR = process.env.BOT_DATA_DIR || __dirname;
+fs.mkdirSync(RUNTIME_DIR, { recursive: true });
+const CONFIG_PATH = path.join(RUNTIME_DIR, 'config.json');
+
+function desktopEvent(type, payload = {}) {
+  if (process.env.BOT_DESKTOP_EVENTS === '1') {
+    console.log(`[desktop-event] ${JSON.stringify({ type, ...payload })}`);
+  }
+}
 const DEFAULT_CONFIG = {
   ownerNumber: '201040224684',
   // WhatsApp is currently exposing this account as a LID.
@@ -49,6 +58,7 @@ function loadConfig() {
 
 let config = loadConfig();
 const adminAccess = new AdminAccess();
+const commandConfig = new CommandConfig();
 
 // MULTI_BLOCKED_GROUPS_PATCH
 config.blockedGroupIds = Array.from(new Set([
@@ -92,13 +102,17 @@ function addLog(action, details) {
   console.log(`[${action}] ${details}`);
 }
 
-const client = new Client({
-  authStrategy: new LocalAuth({ clientId: 'admin-bot' }),
+const clientOptions = {
+  authStrategy: new LocalAuth({ clientId: 'admin-bot', dataPath: path.join(RUNTIME_DIR, '.wwebjs_auth') }),
   puppeteer: {
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   }
-});
+};
+if (process.env.BOT_ELECTRON_HOST === '1' && global.__BOT_ELECTRON_TARGET) {
+  clientOptions.electron = { window: global.__BOT_ELECTRON_TARGET };
+}
+const client = new Client(clientOptions);
 
 const messageBuckets = new Map();
 const dashboardGroupCache = new Map();
@@ -455,53 +469,71 @@ async function resolvePeople(message, args) {
     .filter(Boolean);
 }
 
-function helpText() {
-  return `أوامر المالك فقط:
+function helpText(authorization) {
+  const prefix = commandConfig.prefix();
+  const full = `Commands:
 
-عام:
-!help  !ping  !status  !groups  !logs  !group-info
+General:
+${prefix}help  ${prefix}ping  ${prefix}status  ${prefix}groups  ${prefix}logs  ${prefix}group-info
 
-الجروب:
-!lock  !unlock  !lock-duration 5
-!rate-limit 25 60  |  !rate-limit off
-!clear-group تأكيد  (يطرد كل الأعضاء عدا الأدمن)
+Group:
+${prefix}lock  ${prefix}unlock  ${prefix}lock-duration 5
+${prefix}rate-limit 25 60  |  ${prefix}rate-limit off
+${prefix}clear-group تأكيد
 
-المحظورون:
-!set-blocked-group  !add-target  !remove-target
-!sync-blocked  !auto-sync on|off
-!check-number 201234567890
-!exception-add 201234567890
-!exception-remove 201234567890
-!dry-run on|off
+Blocked members:
+${prefix}add-blocked-group  ${prefix}remove-blocked-group
+${prefix}sync-blocked  ${prefix}auto-sync on|off
+${prefix}check-number 201234567890
+${prefix}exception-add 201234567890
+${prefix}exception-remove 201234567890
+${prefix}dry-run on|off
 
-طلبات الانضمام:
-!set-approval-group  !set-allow-group
-!approval-on  !approval-off
-!approval-mode blacklist|allowlist
-!approve-pending  !reject-blocked
+Membership requests:
+${prefix}set-approval-group  ${prefix}set-allow-group
+${prefix}approval-on  ${prefix}approval-off
+${prefix}approval-mode blacklist|allowlist
+${prefix}approve-pending  ${prefix}reject-blocked
 
-الأعضاء:
-!scan-group  !member-check 201234567890
-!remove 201234567890  !promote 201234567890  !demote 201234567890`;
+Members:
+${prefix}scan-group  ${prefix}member-check 201234567890
+${prefix}remove 201234567890  ${prefix}promote 201234567890  ${prefix}demote 201234567890`;
+  const roleCommands = authorization.type === 'member'
+    ? adminAccess.reload().members.allowedCommands
+    : [...(authorization.role.allowedCommands || []), ...(authorization.admin.allowedCommands || [])];
+  if (roleCommands.includes('*')) return full;
+  const denied = new Set((authorization.admin?.deniedCommands || []).map(value => String(value).replace(/^!/, '')));
+  const available = [...new Set(roleCommands)]
+    .map(value => String(value).replace(/^!/, ''))
+    .filter(value => value && !denied.has(value) && commandConfig.isEnabled(value));
+  return `Available commands:
+
+${available.map(value => `${prefix}${value}`).join('  ') || 'No commands are available for this account.'}`;
 }
 
 async function handleCommand(message) {
-  if (!(await isOwner(message))) return;
-
   const body = String(message.body || '').trim();
-  if (!body.startsWith('!')) return;
+  const prefix = commandConfig.prefix();
+  if (!body.startsWith(prefix)) return;
 
   const args = body.split(/\s+/);
-  const command = args[0].toLowerCase();
+  const requested = args[0].slice(prefix.length);
+  const resolved = commandConfig.resolve(requested);
+  if (!resolved) return reply(message, commandConfig.globalReply('unknownCommandReply', `Unknown command. Use ${prefix}help.`));
+  if (!commandConfig.isEnabled(resolved)) return reply(message, commandConfig.globalReply('disabledReply', 'This command is currently disabled.'));
+  const authorization = await adminAccess.authorizeMessage(message, resolved, config);
+  if (!authorization.allowed) return reply(message, commandConfig.globalReply('forbiddenReply', 'You do not have permission to use this command.'));
+  const command = `!${resolved}`;
+  const respond = (text, values) => reply(message, commandConfig.replyFor(resolved, text, values));
 
   try {
     switch (command) {
       case '!help':
-        return reply(message, helpText());
+        return respond(helpText(authorization));
       case '!ping':
-        return reply(message, 'pong - البوت يعمل.');
+        return respond( 'pong - البوت يعمل.');
       case '!status':
-        return reply(message, `الحالة:
+        return respond( `الحالة:
 المالك: ${config.ownerNumber}
 Dry-run: ${config.dryRun ? 'ON' : 'OFF'}
 الموافقة: ${config.approvalEnabled ? 'ON' : 'OFF'}
@@ -511,115 +543,113 @@ Dry-run: ${config.dryRun ? 'ON' : 'OFF'}
 الجروبات المستهدفة: ${config.targetGroupIds.length}`);
       case '!groups': {
         const chats = (await getKnownChats()).filter(chat => chat.isGroup);
-        return reply(
-          message,
+        return respond(
           chats.map((chat, i) => `${i + 1}. ${chat.name}\n${chat.id._serialized}`).join('\n\n') || 'لا توجد جروبات.'
         );
       }
       case '!logs':
-        return reply(
-          message,
+        return respond(
           config.logs.slice(-15).map(item => `${item.at} | ${item.action} | ${item.details}`).join('\n') || 'لا توجد سجلات.'
         );
       case '!group-info': {
         const chat = await getChatFromMessage(message);
         if (!chat) return;
-        return reply(message, `${chat.name}\nID: ${chat.id._serialized}\nالأعضاء: ${chat.participants.length}\nالبوت Admin: ${await isBotAdmin(chat) ? 'نعم' : 'لا'}`);
+        return respond( `${chat.name}\nID: ${chat.id._serialized}\nالأعضاء: ${chat.participants.length}\nالبوت Admin: ${await isBotAdmin(chat) ? 'نعم' : 'لا'}`);
       }
       case '!dry-run':
-        if (!args[1]) return reply(message, `Dry-run: ${config.dryRun ? 'ON' : 'OFF'}`);
+        if (!args[1]) return respond( `Dry-run: ${config.dryRun ? 'ON' : 'OFF'}`);
         config.dryRun = args[1].toLowerCase() === 'on';
         saveConfig();
-        return reply(message, `Dry-run أصبح ${config.dryRun ? 'ON' : 'OFF'}.`);
+        return respond( `Dry-run أصبح ${config.dryRun ? 'ON' : 'OFF'}.`);
       case '!set-blocked-group':
       case '!add-blocked-group': {
         const groupId = typeof message.from === 'string' && message.from.endsWith('@g.us') ? message.from : null;
-        if (!groupId) return reply(message, 'استخدم الأمر من داخل جروب.');
+        if (!groupId) return respond( 'استخدم الأمر من داخل جروب.');
         if (!config.blockedGroupIds.includes(groupId)) config.blockedGroupIds.push(groupId);
         saveBlockedGroupIds();
-        return reply(message, 'تمت إضافة هذا الجروب للبلاك ليست. عدد الجروبات: ' + config.blockedGroupIds.length);
+        return respond( 'تمت إضافة هذا الجروب للبلاك ليست. عدد الجروبات: ' + config.blockedGroupIds.length);
       }
       case '!remove-blocked-group': {
         const groupId = typeof message.from === 'string' && message.from.endsWith('@g.us') ? message.from : null;
-        if (!groupId) return reply(message, 'استخدم الأمر من داخل جروب.');
+        if (!groupId) return respond( 'استخدم الأمر من داخل جروب.');
         config.blockedGroupIds = config.blockedGroupIds.filter(id => id !== groupId);
         saveBlockedGroupIds();
-        return reply(message, 'تمت إزالة هذا الجروب من البلاك ليست. المتبقي: ' + config.blockedGroupIds.length);
+        return respond( 'تمت إزالة هذا الجروب من البلاك ليست. المتبقي: ' + config.blockedGroupIds.length);
       }
       case '!list-blocked-groups':
-        return reply(message, config.blockedGroupIds.length ? config.blockedGroupIds.map((id, i) => (i + 1) + '. ' + id).join('\n') : 'لا توجد جروبات بلاك ليست.');
+        return respond( config.blockedGroupIds.length ? config.blockedGroupIds.map((id, i) => (i + 1) + '. ' + id).join('\n') : 'لا توجد جروبات بلاك ليست.');
       case '!clear-blocked-groups':
         config.blockedGroupIds = [];
         saveBlockedGroupIds();
-        return reply(message, 'تم تصفير جروبات البلاك ليست.');
+        return respond( 'تم تصفير جروبات البلاك ليست.');
       case '!add-target': {
         const chat = await getChatFromMessage(message);
         if (!chat) return;
         if (!config.targetGroupIds.includes(chat.id._serialized)) config.targetGroupIds.push(chat.id._serialized);
         saveConfig();
-        return reply(message, `تمت إضافة ${chat.name} للجروبات المستهدفة.`);
+        return respond( `تمت إضافة ${chat.name} للجروبات المستهدفة.`);
       }
       case '!remove-target': {
         const chat = await getChatFromMessage(message);
         if (!chat) return;
         config.targetGroupIds = config.targetGroupIds.filter(id => id !== chat.id._serialized);
         saveConfig();
-        return reply(message, `تم حذف ${chat.name} من الجروبات المستهدفة.`);
+        return respond( `تم حذف ${chat.name} من الجروبات المستهدفة.`);
       }
       case '!set-approval-group': {
         const chat = await getChatFromMessage(message);
         if (!chat) return;
         if (!config.approvalGroupIds.includes(chat.id._serialized)) config.approvalGroupIds.push(chat.id._serialized);
         saveConfig();
-        return reply(message, `تم تحديد ${chat.name} لجروب طلبات الانضمام.`);
+        return respond( `تم تحديد ${chat.name} لجروب طلبات الانضمام.`);
       }
       case '!set-allow-group': {
         const chat = await getChatFromMessage(message);
         if (!chat) return;
         config.allowGroupId = chat.id._serialized;
         saveConfig();
-        return reply(message, `تم تحديد ${chat.name} كمصدر لقائمة السماح.`);
+        return respond( `تم تحديد ${chat.name} كمصدر لقائمة السماح.`);
       }
       case '!sync-blocked': {
         const result = await syncBlocked();
-        return reply(message, `اكتمل الفحص. تم فحص ${result.scanned} جروب. تمت إزالة ${result.removed}. المتوقّع في dry-run: ${result.wouldRemove}.`);
+        return respond( `اكتمل الفحص. تم فحص ${result.scanned} جروب. تمت إزالة ${result.removed}. المتوقّع في dry-run: ${result.wouldRemove}.`);
       }
       case '!auto-sync':
         config.autoSyncEnabled = args[1]?.toLowerCase() === 'on';
         saveConfig();
-        return reply(message, `المزامنة التلقائية أصبحت ${config.autoSyncEnabled ? 'ON' : 'OFF'}.`);
+        return respond( `المزامنة التلقائية أصبحت ${config.autoSyncEnabled ? 'ON' : 'OFF'}.`);
       case '!check-number': {
         const number = args[1];
-        if (!number) return reply(message, 'اكتب الرقم بعد الأمر.');
+        if (!number) return respond( 'اكتب الرقم بعد الأمر.');
         const blocked = await blockedKeys();
-        return reply(message, hasKey(blocked, jidFromNumber(number)) ? 'الرقم موجود في قائمة المحظورين.' : 'الرقم غير موجود في قائمة المحظورين.');
+        return respond( hasKey(blocked, jidFromNumber(number)) ? 'الرقم موجود في قائمة المحظورين.' : 'الرقم غير موجود في قائمة المحظورين.');
       }
       case '!exception-add':
-        if (!args[1]) return reply(message, 'اكتب الرقم بعد الأمر.');
+        if (!args[1]) return respond( 'اكتب الرقم بعد الأمر.');
         if (!config.exceptions.includes(digits(args[1]))) config.exceptions.push(digits(args[1]));
         saveConfig();
-        return reply(message, 'تمت إضافة الرقم للاستثناءات.');
+        return respond( 'تمت إضافة الرقم للاستثناءات.');
       case '!exception-remove':
         config.exceptions = config.exceptions.filter(number => number !== digits(args[1]));
         saveConfig();
-        return reply(message, 'تم حذف الرقم من الاستثناءات.');
+        return respond( 'تم حذف الرقم من الاستثناءات.');
       case '!lock': {
         const chat = await getChatFromMessage(message);
         if (!chat) return;
-        if (config.dryRun) return reply(message, 'Dry-run مفعّل؛ لم يتم القفل فعليًا.');
-        return reply(message, await lockGroup(chat, 'manual') ? 'تم قفل الجروب.' : 'تعذر قفل الجروب.');
+        if (config.dryRun) return respond( 'Dry-run مفعّل؛ لم يتم القفل فعليًا.');
+        return respond( await lockGroup(chat, 'manual') ? 'تم قفل الجروب.' : 'تعذر قفل الجروب.');
       }
       case '!unlock': {
         const chat = await getChatFromMessage(message);
         if (!chat) return;
-        if (config.dryRun) return reply(message, 'Dry-run مفعّل؛ لم يتم الفتح فعليًا.');
-        return reply(message, await unlockGroup(chat) ? 'تم فتح الجروب.' : 'تعذر فتح الجروب.');
+        if (config.dryRun) return respond( 'Dry-run مفعّل؛ لم يتم الفتح فعليًا.');
+        return respond( await unlockGroup(chat) ? 'تم فتح الجروب.' : 'تعذر فتح الجروب.');
       }
       case '!lock-duration':
-        if (!Number(args[1])) return reply(message, `المدة الحالية: ${config.rateLimit.lockDurationMinutes} دقيقة.`);
+        if (!Number(args[1])) return respond( `المدة الحالية: ${config.rateLimit.lockDurationMinutes} دقيقة.`);
         config.rateLimit.lockDurationMinutes = Number(args[1]);
         saveConfig();
-        return reply(message, `تم تحديد مدة القفل إلى ${args[1]} دقيقة.`);
+        return respond( `تم تحديد مدة القفل إلى ${args[1]} دقيقة.`);
       case '!rate-limit':
         if (args[1]?.toLowerCase() === 'off') {
           config.rateLimit.enabled = false;
@@ -629,33 +659,33 @@ Dry-run: ${config.dryRun ? 'ON' : 'OFF'}
           config.rateLimit.windowSeconds = Number(args[2]) || 60;
         }
         saveConfig();
-        return reply(message, config.rateLimit.enabled ? `تم ضبط الحد إلى ${config.rateLimit.limit} رسالة خلال ${config.rateLimit.windowSeconds} ثانية.` : 'تم إيقاف حد السرعة.');
+        return respond( config.rateLimit.enabled ? `تم ضبط الحد إلى ${config.rateLimit.limit} رسالة خلال ${config.rateLimit.windowSeconds} ثانية.` : 'تم إيقاف حد السرعة.');
       case '!approval-on':
         config.approvalEnabled = true;
         saveConfig();
-        return reply(message, 'تم تشغيل الموافقة التلقائية.');
+        return respond( 'تم تشغيل الموافقة التلقائية.');
       case '!approval-off':
         config.approvalEnabled = false;
         saveConfig();
-        return reply(message, 'تم إيقاف الموافقة التلقائية.');
+        return respond( 'تم إيقاف الموافقة التلقائية.');
       case '!approval-mode':
-        if (!['blacklist', 'allowlist'].includes(args[1])) return reply(message, 'استخدم blacklist أو allowlist.');
+        if (!['blacklist', 'allowlist'].includes(args[1])) return respond( 'استخدم blacklist أو allowlist.');
         config.approvalMode = args[1];
         saveConfig();
-        return reply(message, `وضع الموافقة: ${config.approvalMode}.`);
+        return respond( `وضع الموافقة: ${config.approvalMode}.`);
       case '!approve-pending': {
         const result = await processMembershipRequests();
-        return reply(message, `طلبات الموافقة: تم قبول ${result.approved}. في dry-run: ${result.wouldApprove}. تم رفض ${result.rejected}.`);
+        return respond( `طلبات الموافقة: تم قبول ${result.approved}. في dry-run: ${result.wouldApprove}. تم رفض ${result.rejected}.`);
       }
       case '!reject-blocked': {
         const result = await processMembershipRequests({ onlyBlocked: true });
-        return reply(message, `تم رفض ${result.rejected} طلب. في dry-run: ${result.wouldReject}.`);
+        return respond( `تم رفض ${result.rejected} طلب. في dry-run: ${result.wouldReject}.`);
       }
       case '!scan-group': {
         const chat = await getChatFromMessage(message);
         if (!chat) return;
         const result = await syncBlocked(chat.id._serialized);
-        return reply(message, `تم فحص ${chat.name}. تمت إزالة ${result.removed}. في dry-run: ${result.wouldRemove}.`);
+        return respond( `تم فحص ${chat.name}. تمت إزالة ${result.removed}. في dry-run: ${result.wouldRemove}.`);
       }
       case '!member-check':
       case '!check-member': {
@@ -663,19 +693,19 @@ Dry-run: ${config.dryRun ? 'ON' : 'OFF'}
         const chat = await getChatFromMessage(message);
         if (!chat || !number) return;
         const found = participantIds(chat).some(id => personKey(id) === digits(number));
-        return reply(message, found ? 'العضو موجود في الجروب.' : 'العضو غير موجود في الجروب.');
+        return respond( found ? 'العضو موجود في الجروب.' : 'العضو غير موجود في الجروب.');
       }
       case '!clear-group':
       case '!purge-group': {
         const chat = await getChatFromMessage(message);
         if (!chat) return;
-        if (!(await isBotAdmin(chat))) return reply(message, 'رقم البوت ليس Admin في هذا الجروب.');
+        if (!(await isBotAdmin(chat))) return respond( 'رقم البوت ليس Admin في هذا الجروب.');
         if ((args[1] || '') !== 'تأكيد') {
-          return reply(message, `⚠️ سيتم طرد كل الأعضاء (عدا الأدمن والمالك والبوت) من "${chat.name}".\nعدد الأعضاء الحاليين: ${chat.participants.length}\nللتأكيد اكتب:\n!clear-group تأكيد`);
+          return respond( `⚠️ سيتم طرد كل الأعضاء (عدا الأدمن والمالك والبوت) من "${chat.name}".\nعدد الأعضاء الحاليين: ${chat.participants.length}\nللتأكيد اكتب:\n!clear-group تأكيد`);
         }
         const result = await clearGroup(chat);
-        if (config.dryRun) return reply(message, `Dry-run مفعّل؛ المتوقّع طرده: ${result.wouldRemove} من ${result.total}. لم يتم تنفيذ شيء فعليًا.`);
-        return reply(message, `تم تصفية الجروب. تم طرد ${result.removed} من ${result.total}. تم الإبقاء على ${result.kept} (أدمن/مالك/بوت).`);
+        if (config.dryRun) return respond( `Dry-run مفعّل؛ المتوقّع طرده: ${result.wouldRemove} من ${result.total}. لم يتم تنفيذ شيء فعليًا.`);
+        return respond( `تم تصفية الجروب. تم طرد ${result.removed} من ${result.total}. تم الإبقاء على ${result.kept} (أدمن/مالك/بوت).`);
       }
       case '!remove':
       case '!promote':
@@ -683,30 +713,32 @@ Dry-run: ${config.dryRun ? 'ON' : 'OFF'}
         const chat = await getChatFromMessage(message);
         if (!chat) return;
         const people = await resolvePeople(message, args);
-        if (!people.length) return reply(message, 'اذكر العضو أو اكتب الرقم بعد الأمر.');
-        if (!(await isBotAdmin(chat))) return reply(message, 'رقم البوت ليس Admin في هذا الجروب.');
-        if (config.dryRun) return reply(message, 'Dry-run مفعّل؛ لم يتم تنفيذ العملية.');
+        if (!people.length) return respond( 'اذكر العضو أو اكتب الرقم بعد الأمر.');
+        if (!(await isBotAdmin(chat))) return respond( 'رقم البوت ليس Admin في هذا الجروب.');
+        if (config.dryRun) return respond( 'Dry-run مفعّل؛ لم يتم تنفيذ العملية.');
         if (command === '!remove') await chat.removeParticipants(people);
         if (command === '!promote') await chat.promoteParticipants(people);
         if (command === '!demote') await chat.demoteParticipants(people);
         addLog(command.slice(1), `${chat.name}: ${people.join(', ')}`);
-        return reply(message, 'تم تنفيذ العملية.');
+        return respond( 'تم تنفيذ العملية.');
       }
       default:
-        return reply(message, 'أمر غير معروف. استخدم !help.');
+        return respond( 'أمر غير معروف. استخدم !help.');
     }
   } catch (error) {
     console.error('Command error:', error.stack || error);
-    await reply(message, `حدث خطأ: ${error.message}`);
+    await respond( `حدث خطأ: ${error.message}`);
   }
 }
 
 client.on('qr', qr => {
+  desktopEvent('qr', { value: qr });
   console.log('امسح QR من رقم البوت:');
   qrcode.generate(qr, { small: true });
 });
 
 client.on('ready', () => {
+  desktopEvent('ready');
   console.log('WhatsApp Admin Bot جاهز.');
   if (maintenanceStarted) return;
   maintenanceStarted = true;
@@ -721,8 +753,14 @@ client.on('ready', () => {
   }, 60 * 1000);
 });
 
-client.on('auth_failure', message => console.error('Auth failure:', message));
-client.on('disconnected', reason => console.log('Disconnected:', reason));
+client.on('auth_failure', message => {
+  desktopEvent('auth-failure', { message: String(message) });
+  console.error('Auth failure:', message);
+});
+client.on('disconnected', reason => {
+  desktopEvent('disconnected', { reason: String(reason) });
+  console.log('Disconnected:', reason);
+});
 
 async function processIncomingMessage(message) {
   if (typeof message.from === 'string' && message.from.endsWith('@g.us')) {

@@ -1,11 +1,14 @@
 {
   "name": "whatsapp-admin-bot",
-  "version": "2.4.0",
+  "version": "3.0.0-beta.1",
   "private": true,
   "scripts": {
     "start": "node --require ./port-guard.js --require ./phone-resolver.js --require ./rapid-ocr.js --require ./student-gate.js bot.js",
-    "check": "node --check bot.js && node --check port-guard.js && node --check phone-resolver.js && node --check rapid-ocr.js && node --check student-gate.js && node --check lib/admin-access.js && node --check lib/admin-dashboard.js && node --check lib/lifecycle.js && node --check lib/runtime-manager.js && node --check lib/ocr-service.js && node --check lib/student-store.js",
-    "test": "node --test"
+    "check": "node --check bot.js && node --check port-guard.js && node --check phone-resolver.js && node --check rapid-ocr.js && node --check student-gate.js && node --check lib/admin-access.js && node --check lib/admin-dashboard.js && node --check lib/lifecycle.js && node --check lib/runtime-manager.js && node --check lib/ocr-service.js && node --check lib/student-store.js && node --check lib/command-config.js && node --check lib/whatsapp-library.js && node --check desktop/main.js && node --check desktop/preload.js && node --check desktop/renderer.js",
+    "test": "node --test",
+    "desktop": "electron .",
+    "dist:win": "electron-builder --win nsis --x64",
+    "pack:win": "electron-builder --win dir --x64"
   },
   "engines": {
     "node": ">=22.13"
@@ -14,6 +17,51 @@
     "qrcode-terminal": "^0.12.0",
     "tesseract.js": "^6.0.1",
     "whatsapp-web.js": "github:wwebjs/whatsapp-web.js#refs/pull/201850/head",
-    "xlsx": "^0.18.5"
-  }
+    "xlsx": "^0.18.5",
+    "qrcode": "^1.5.4",
+    "wwebjs-electron": "^1.34.7"
+  },
+  "main": "desktop/main.js",
+  "devDependencies": {
+    "electron": "^38.2.2",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.omanarts.whatsappadminstudio",
+    "productName": "WhatsApp Admin Studio",
+    "asar": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "**/*",
+      "!release/**",
+      "!test/**",
+      "!*.before-*",
+      "!data/**",
+      "!.wwebjs_auth/**",
+      "!.wwebjs_cache/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "WhatsApp-Admin-Studio-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "WhatsApp Admin Studio",
+      "deleteAppDataOnUninstall": false
+    }
+  },
+  "description": "Desktop control center for a local WhatsApp group administration and Student Gate bot",
+  "author": "Tareq612345"
 }

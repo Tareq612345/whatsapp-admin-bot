@@ -2,6 +2,23 @@
 
 A local WhatsApp group-management bot with message-rate protection, reusable block/allow lists, membership-request automation, student-card OCR, review dashboards, and Excel exports.
 
+## Windows desktop application
+
+Version 3 introduces **WhatsApp Admin Studio**, an Electron desktop interface that can be packaged as a Windows EXE installer.
+
+```powershell
+npm install
+npm run desktop
+```
+
+Build the 64-bit Windows installer with:
+
+```powershell
+npm run dist:win
+```
+
+The desktop application provides QR login, process controls, Windows auto-start, administrator and role management, per-user permissions, member commands, aliases, editable replies, activity logs, and direct access to both dashboards. See [`docs/WINDOWS-APP.md`](docs/WINDOWS-APP.md) for the complete desktop guide.
+
 > This project uses `whatsapp-web.js` and automates a normal WhatsApp account through WhatsApp Web. It is not an official WhatsApp Business API integration.
 
 ## Features

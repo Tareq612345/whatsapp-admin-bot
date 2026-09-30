@@ -1,4 +1,4 @@
-const { Client } = require('whatsapp-web.js');
+const { Client } = require('./lib/whatsapp-library');
 const { StudentStore } = require('./lib/student-store');
 const phoneById = new Map();
 const pending = new Map();
