@@ -15,6 +15,17 @@ Maintain **WhatsApp Admin Studio** as a reliable Windows desktop control center 
 - Existing user configuration and local data must continue to load after an update, or a documented migration must be supplied.
 - Never commit WhatsApp sessions, credentials, phone lists, national IDs, databases, logs containing personal data, or local runtime configuration.
 
+> [!IMPORTANT]
+> **WhatsApp identity and ownership**
+>
+> - Never hardcode a real owner phone number or WhatsApp LID in source code, defaults, examples, previews, tests, documentation, or release artifacts.
+> - A WhatsApp LID is an internal identifier. Never require an ordinary user to find, copy, or enter it manually.
+> - Capture LIDs automatically from authenticated WhatsApp events and verified incoming messages.
+> - First-time ownership must use a short-lived, one-time claim code shown inside Studio and sent from the intended owner's WhatsApp account.
+> - Save every verified identifier observed for that owner, but show the user only understandable account information such as display name and phone number when available.
+> - Do not enable privileged commands until ownership has been claimed successfully.
+> - Claim codes must expire, become invalid immediately after one successful use, and never be written to normal logs.
+
 ## 3. Repository map
 
 Inspect the current tree before relying on this summary.

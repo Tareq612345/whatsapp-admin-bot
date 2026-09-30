@@ -35,3 +35,17 @@ This append-only file records AI-assisted repository changes, their validation, 
   - Real WhatsApp QR scan and update reuse: NOT RUN — requires a human WhatsApp account
 - **Result:** PARTIAL
 - **Known limitations/follow-up:** The Windows workflow must validate the packaged application. A human must complete one real WhatsApp scan and upgrade test because CI cannot authenticate a WhatsApp account.
+
+## 2026-09-30 — Make automatic LID handling a mandatory rule
+
+- **Agent/tool:** Notion AI with GitHub MCP
+- **Request:** Make the WhatsApp LID and ownership rule prominent so future AI changes never ask ordinary users to find an internal identifier.
+- **Branch/PR:** `docs/important-whatsapp-identity-rule` / pending when this entry was written
+- **Scope:** Added a highlighted GitHub `IMPORTANT` callout covering removal of hardcoded identities, automatic LID capture, one-time ownership claims, and privileged-command gating; no runtime behavior changed.
+- **Files:** `AGENTS.md`, `AI-CHANGELOG.md`
+- **Behavior:** Future supported coding agents receive an explicit, visually prominent requirement to keep LIDs internal and automate owner verification.
+- **Validation:**
+  - `git diff --check -- AGENTS.md AI-CHANGELOG.md`: PASS — no whitespace errors
+  - Runtime tests: NOT RUN — documentation/instruction-only change
+- **Result:** SUCCESS
+- **Known limitations/follow-up:** The rule is documented, but the one-time ownership claim workflow still needs to be implemented in the application.
