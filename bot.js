@@ -2,6 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const { AdminAccess } = require('./lib/admin-access');
+const { RuntimeManager } = require('./lib/runtime-manager');
+const { startAdminDashboard } = require('./lib/admin-dashboard');
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const DEFAULT_CONFIG = {
@@ -45,6 +48,7 @@ function loadConfig() {
 }
 
 let config = loadConfig();
+const adminAccess = new AdminAccess();
 
 // MULTI_BLOCKED_GROUPS_PATCH
 config.blockedGroupIds = Array.from(new Set([
@@ -112,22 +116,7 @@ let maintenanceStarted = false;
 const processedMessageIds = new Set();
 
 async function isOwner(message) {
-  const owner = digits(config.ownerNumber);
-  const ownerJid = jidFromNumber(config.ownerNumber);
-  const senderIds = [message.author, message.from].filter(Boolean);
-
-  const ownerLids = (config.ownerLids || []).map(digits);
-  if (message.from === ownerJid) return true;
-  if (senderIds.some(id => personKey(id) === owner)) return true;
-  if (senderIds.some(id => ownerLids.includes(personKey(id)))) return true;
-
-  // This fallback helps with group messages where WhatsApp uses a LID.
-  try {
-    const contact = await message.getContact();
-    return digits(contact.number) === owner;
-  } catch {
-    return false;
-  }
+  return adminAccess.isAllowedMessage(message, config);
 }
 
 async function reply(message, text) {
@@ -770,8 +759,16 @@ async function processIncomingMessage(message) {
 // Use one event only to avoid duplicate replies.
 client.on('message', processIncomingMessage);
 
+const runtime = new RuntimeManager(client, {
+  ownerChatId: () => jidFromNumber(config.ownerNumber)
+});
+
 saveConfig();
-client.initialize();
+client.initialize().catch(error => {
+  runtime.recordError(error);
+  console.error('Initialization failed:', error.stack || error);
+  runtime.scheduleReconnect();
+});
 
 // WA_COMPAT_SERIALIZED_PATCH
 // Temporary compatibility patch for WhatsApp Web changing MsgKey._serialized to MsgKey.$1.
@@ -797,56 +794,15 @@ client.on('ready', installWhatsAppCompatibilityPatch);
 
 
 // LOCAL_DASHBOARD_BRIDGE
-function startLocalDashboard() {
-  const path = require('path');
-  const dashboardPath = path.join(__dirname, 'dashboard.html');
-  const http = require('http');
-  const { URL } = require('url');
-  const send = (res, code, data) => {
-    res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify(data));
-  };
-  const body = req => new Promise((resolve, reject) => {
-    let raw = '';
-    req.on('data', chunk => { raw += chunk; if (raw.length > 100000) reject(new Error('Request too large')); });
-    req.on('end', () => { try { resolve(raw ? JSON.parse(raw) : {}); } catch { reject(new Error('Invalid JSON')); } });
-    req.on('error', reject);
-  });
-  const groups = async () => {
-    const ids = [config.blockedGroupId, config.allowGroupId, ...(config.targetGroupIds || []), ...(config.approvalGroupIds || [])].filter(Boolean);
-    for (const id of ids) {
-      if (!dashboardGroupCache.has(id)) dashboardGroupCache.set(id, { id, name: 'جروب محفوظ', participants: null });
-    }
-    return Array.from(dashboardGroupCache.values());
-  };
-  const action = async data => {
-    if (data.action === 'dryRun') { config.dryRun = !!data.value; saveConfig(); return 'تم تحديث Dry-run'; }
-    if (data.action === 'rateEnabled') { config.rateLimit.enabled = !!data.value; saveConfig(); return 'تم تحديث مراقبة السرعة'; }
-    if (data.action === 'approvalEnabled') { config.approvalEnabled = !!data.value; saveConfig(); return 'تم تحديث الموافقة التلقائية'; }
-    if (data.action === 'autoSync') { config.autoSyncEnabled = !!data.value; saveConfig(); return 'تم تحديث المزامنة التلقائية'; }
-    if (data.action === 'settings') { config.rateLimit.limit = Math.max(1, Number(data.limit) || 25); config.rateLimit.windowSeconds = Math.max(5, Number(data.windowSeconds) || 60); config.rateLimit.lockDurationMinutes = Math.max(0, Number(data.lockDurationMinutes) || 5); if (['blacklist','allowlist'].includes(data.approvalMode)) config.approvalMode = data.approvalMode; saveConfig(); return 'تم حفظ الإعدادات'; }
-    if (data.action === 'setBlockedGroup') { if (data.groupId && !config.blockedGroupIds.includes(data.groupId)) config.blockedGroupIds.push(data.groupId); saveBlockedGroupIds(); return 'تمت إضافة جروب محظورين'; }
-    if (data.action === 'setAllowGroup') { config.allowGroupId = data.groupId || null; saveConfig(); return 'تم تحديد جروب السماح'; }
-    if (data.action === 'setApprovalGroup') { if (data.groupId && !config.approvalGroupIds.includes(data.groupId)) config.approvalGroupIds.push(data.groupId); saveConfig(); return 'تم تحديد جروب الطلبات'; }
-    if (data.action === 'addTarget') { if (data.groupId && !config.targetGroupIds.includes(data.groupId)) config.targetGroupIds.push(data.groupId); saveConfig(); return 'تمت إضافة الجروب للمراقبة'; }
-    if (data.action === 'removeTarget') { config.targetGroupIds = config.targetGroupIds.filter(id => id !== data.groupId); saveConfig(); return 'تمت إزالة الجروب من المراقبة'; }
-    if (data.action === 'syncBlocked') { const r = await syncBlocked(); return 'اكتمل الفحص: ' + r.removed + ' إزالة، ' + r.wouldRemove + ' في Dry-run'; }
-    if (data.action === 'approvePending') { const r = await processMembershipRequests(); return 'الطلبات: ' + r.approved + ' قبول، ' + r.rejected + ' رفض'; }
-    if (data.action === 'rejectBlocked') { const r = await processMembershipRequests({ onlyBlocked: true }); return 'تم رفض ' + r.rejected + ' طلب محظور'; }
-    if (data.action === 'clearGroup') { const group = await groupById(data.groupId); if (!group) return 'تعذر تحميل الجروب'; const r = await clearGroup(group); if (config.dryRun) return 'Dry-run: المتوقّع طرده ' + r.wouldRemove + ' من ' + r.total; return 'تم طرد ' + r.removed + ' من ' + r.total + ' (تم الإبقاء على ' + r.kept + ')'; }
-    throw new Error('إجراء غير معروف');
-  };
-  const server = http.createServer(async (req, res) => {
-    try {
-      const u = new URL(req.url, 'http://127.0.0.1');
-      if (req.method === 'GET' && (u.pathname === '/' || u.pathname === '/dashboard.html')) { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(fs.readFileSync(dashboardPath)); }
-      if (req.method === 'GET' && u.pathname === '/api/status') return send(res, 200, { ready: !!(client.info && client.info.wid), ownerNumber: config.ownerNumber, dryRun: config.dryRun, approvalEnabled: config.approvalEnabled, approvalMode: config.approvalMode, autoSyncEnabled: config.autoSyncEnabled, targetCount: config.targetGroupIds.length, rateLimit: config.rateLimit });
-      if (req.method === 'GET' && u.pathname === '/api/groups') return send(res, 200, { groups: await groups() });
-      if (req.method === 'GET' && u.pathname === '/api/logs') return send(res, 200, { logs: config.logs.slice(-50) });
-      if (req.method === 'POST' && u.pathname === '/api/action') return send(res, 200, { message: await action(await body(req)) });
-      return send(res, 404, { error: 'Not found' });
-    } catch (e) { console.error('Dashboard error:', e.stack || e); if (res.headersSent) return; return send(res, 500, { error: e.message }); }
-  });
-  server.listen(3000, '127.0.0.1', () => console.log('لوحة التحكم: http://127.0.0.1:3000'));
-}
-startLocalDashboard();
+startAdminDashboard({
+  client,
+  getConfig: () => config,
+  saveConfig,
+  saveBlockedGroupIds,
+  dashboardGroupCache,
+  syncBlocked,
+  processMembershipRequests,
+  clearGroup,
+  groupById,
+  runtime
+});
