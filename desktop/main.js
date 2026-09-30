@@ -15,6 +15,12 @@ function projectRoot() {
   return app.isPackaged ? path.join(process.resourcesPath, 'app.asar') : path.join(__dirname, '..');
 }
 
+function processWorkingDirectory() {
+  // ASAR paths work with Electron's fs/require hooks, but Windows cannot use
+  // an archive path as the native working directory for child_process.spawn.
+  return app.isPackaged ? process.resourcesPath : projectRoot();
+}
+
 function dataPaths() {
   const dataRoot = app.getPath('userData');
   return {
@@ -94,8 +100,8 @@ function startBot() {
   ensureUserFiles();
   botState = { status: 'starting', pid: null, startedAt: new Date().toISOString(), lastExit: null };
   const childArguments = app.isPackaged ? ['--bot-host'] : [projectRoot(), '--bot-host'];
-  botProcess = spawn(process.execPath, childArguments, {
-    cwd: projectRoot(),
+  const child = spawn(app.getPath('exe'), childArguments, {
+    cwd: processWorkingDirectory(),
     windowsHide: true,
     env: {
       ...process.env,
@@ -104,20 +110,24 @@ function startBot() {
       BOT_CONFIG_DIR: dataPaths().configRoot
     }
   });
-  botState.pid = botProcess.pid;
+  botProcess = child;
+  botState.pid = child.pid;
   send('bot-status', botState);
-  botProcess.stdout.on('data', chunk => {
+  child.stdout.on('data', chunk => {
     const text = chunk.toString();
     addLog('bot', text);
     for (const line of text.split(/\r?\n/)) processDesktopEvent(line);
   });
-  botProcess.stderr.on('data', chunk => addLog('error', chunk.toString()));
-  botProcess.on('error', error => {
+  child.stderr.on('data', chunk => addLog('error', chunk.toString()));
+  child.on('error', error => {
     addLog('desktop', error.stack || error.message);
+    if (botProcess === child) botProcess = null;
     botState.status = 'error';
+    botState.pid = null;
     send('bot-status', botState);
   });
-  botProcess.on('exit', (code, signal) => {
+  child.on('exit', (code, signal) => {
+    if (botProcess !== child) return;
     botState = { ...botState, status: 'stopped', pid: null, lastExit: { code, signal, at: new Date().toISOString() } };
     botProcess = null;
     send('bot-status', botState);
@@ -133,7 +143,19 @@ async function stopBot() {
   processToStop.kill('SIGTERM');
   await new Promise(resolve => {
     const timer = setTimeout(() => {
-      if (botProcess === processToStop) processToStop.kill('SIGKILL');
+      if (botProcess === processToStop) {
+        if (process.platform === 'win32' && processToStop.pid) {
+          const killer = spawn('taskkill', ['/pid', String(processToStop.pid), '/T', '/F'], {
+            cwd: processWorkingDirectory(),
+            windowsHide: true,
+            stdio: 'ignore'
+          });
+          killer.once('exit', resolve);
+          killer.once('error', resolve);
+          return;
+        }
+        processToStop.kill('SIGKILL');
+      }
       resolve();
     }, 8000);
     processToStop.once('exit', () => {
@@ -141,6 +163,11 @@ async function stopBot() {
       resolve();
     });
   });
+  if (botProcess === processToStop) {
+    botProcess = null;
+    botState = { ...botState, status: 'stopped', pid: null };
+    send('bot-status', botState);
+  }
   return botState;
 }
 
