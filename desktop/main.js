@@ -8,8 +8,13 @@ const QRCode = require('qrcode');
 let mainWindow;
 let whatsappWindow;
 let botProcess;
+let botStartPromise;
+let botHostLock;
 let botState = { status: 'stopped', pid: null, startedAt: null, lastExit: null };
 const logs = [];
+const isBotHost = process.argv.includes('--bot-host');
+const isSmokeTest = process.argv.includes('--smoke-test');
+const isSmokeChild = process.argv.includes('--smoke-child');
 
 function projectRoot() {
   return app.isPackaged ? path.join(process.resourcesPath, 'app.asar') : path.join(__dirname, '..');
@@ -38,6 +43,67 @@ function ensureUserFiles() {
     const target = path.join(paths.configRoot, name);
     if (!fs.existsSync(target)) fs.copyFileSync(path.join(projectRoot(), 'config', name), target);
   }
+}
+
+function pidIsRunning(pid) {
+  if (!Number.isInteger(Number(pid)) || Number(pid) <= 0) return false;
+  try {
+    process.kill(Number(pid), 0);
+    return true;
+  } catch (error) {
+    return error.code === 'EPERM';
+  }
+}
+
+function acquireBotHostLock() {
+  const lockPath = path.join(dataPaths().dataRoot, 'bot-host.lock');
+  fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const descriptor = fs.openSync(lockPath, 'wx');
+      fs.writeFileSync(descriptor, String(process.pid));
+      fs.closeSync(descriptor);
+      botHostLock = lockPath;
+      return true;
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      let existingPid = 0;
+      try { existingPid = Number(fs.readFileSync(lockPath, 'utf8')); } catch {}
+      if (pidIsRunning(existingPid)) return false;
+      fs.rmSync(lockPath, { force: true });
+    }
+  }
+  return false;
+}
+
+function releaseBotHostLock() {
+  if (!botHostLock) return;
+  try {
+    const ownerPid = Number(fs.readFileSync(botHostLock, 'utf8'));
+    if (ownerPid === process.pid) fs.rmSync(botHostLock, { force: true });
+  } catch {}
+  botHostLock = null;
+}
+
+function cleanupOrphanBotHosts() {
+  if (process.platform !== 'win32') return Promise.resolve();
+  const script = [
+    "$self = $PID",
+    `"$exe = '${app.getPath('exe').replace(/'/g, "''")}'"`,
+    "Get-CimInstance Win32_Process |",
+    "Where-Object { $_.ProcessId -ne $self -and $_.ExecutablePath -eq $exe -and $_.CommandLine -like '*--bot-host*' } |",
+    "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+  ].join('; ');
+  return new Promise(resolve => {
+    const cleanup = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      cwd: processWorkingDirectory(),
+      windowsHide: true,
+      stdio: 'ignore'
+    });
+    cleanup.once('exit', resolve);
+    cleanup.once('error', resolve);
+    setTimeout(resolve, 5000).unref?.();
+  });
 }
 
 function send(channel, payload) {
@@ -69,6 +135,11 @@ async function processDesktopEvent(line) {
 }
 
 function startEmbeddedBotHost() {
+  if (!acquireBotHostLock()) {
+    console.error('[desktop-event] {"type":"duplicate-host","message":"Another bot host is already running."}');
+    app.exit(12);
+    return;
+  }
   process.env.BOT_ELECTRON_HOST = '1';
   process.env.BOT_DESKTOP_EVENTS = '1';
   process.env.BOT_DATA_DIR = dataPaths().dataRoot;
@@ -95,44 +166,55 @@ function startEmbeddedBotHost() {
   require(path.join(root, 'bot.js'));
 }
 
-function startBot() {
+async function startBot() {
   if (botProcess) return botState;
-  ensureUserFiles();
-  botState = { status: 'starting', pid: null, startedAt: new Date().toISOString(), lastExit: null };
-  const childArguments = app.isPackaged ? ['--bot-host'] : [projectRoot(), '--bot-host'];
-  const child = spawn(app.getPath('exe'), childArguments, {
-    cwd: processWorkingDirectory(),
-    windowsHide: true,
-    env: {
-      ...process.env,
-      BOT_DESKTOP_EVENTS: '1',
-      BOT_DATA_DIR: dataPaths().dataRoot,
-      BOT_CONFIG_DIR: dataPaths().configRoot
-    }
-  });
-  botProcess = child;
-  botState.pid = child.pid;
-  send('bot-status', botState);
-  child.stdout.on('data', chunk => {
-    const text = chunk.toString();
-    addLog('bot', text);
-    for (const line of text.split(/\r?\n/)) processDesktopEvent(line);
-  });
-  child.stderr.on('data', chunk => addLog('error', chunk.toString()));
-  child.on('error', error => {
-    addLog('desktop', error.stack || error.message);
-    if (botProcess === child) botProcess = null;
-    botState.status = 'error';
-    botState.pid = null;
+  if (botStartPromise) return botStartPromise;
+  botStartPromise = (async () => {
+    ensureUserFiles();
+    botState = { status: 'starting', pid: null, startedAt: new Date().toISOString(), lastExit: null };
     send('bot-status', botState);
-  });
-  child.on('exit', (code, signal) => {
-    if (botProcess !== child) return;
-    botState = { ...botState, status: 'stopped', pid: null, lastExit: { code, signal, at: new Date().toISOString() } };
-    botProcess = null;
+    await cleanupOrphanBotHosts();
+    if (botProcess) return botState;
+    const childArguments = app.isPackaged ? ['--bot-host'] : [projectRoot(), '--bot-host'];
+    const child = spawn(app.getPath('exe'), childArguments, {
+      cwd: processWorkingDirectory(),
+      windowsHide: true,
+      env: {
+        ...process.env,
+        BOT_DESKTOP_EVENTS: '1',
+        BOT_DATA_DIR: dataPaths().dataRoot,
+        BOT_CONFIG_DIR: dataPaths().configRoot
+      }
+    });
+    botProcess = child;
+    botState.pid = child.pid;
     send('bot-status', botState);
-  });
-  return botState;
+    child.stdout.on('data', chunk => {
+      const text = chunk.toString();
+      addLog('bot', text);
+      for (const line of text.split(/\r?\n/)) processDesktopEvent(line);
+    });
+    child.stderr.on('data', chunk => addLog('error', chunk.toString()));
+    child.on('error', error => {
+      addLog('desktop', error.stack || error.message);
+      if (botProcess === child) botProcess = null;
+      botState.status = 'error';
+      botState.pid = null;
+      send('bot-status', botState);
+    });
+    child.on('exit', (code, signal) => {
+      if (botProcess !== child) return;
+      botState = { ...botState, status: 'stopped', pid: null, lastExit: { code, signal, at: new Date().toISOString() } };
+      botProcess = null;
+      send('bot-status', botState);
+    });
+    return botState;
+  })();
+  try {
+    return await botStartPromise;
+  } finally {
+    botStartPromise = null;
+  }
 }
 
 async function stopBot() {
@@ -176,6 +258,44 @@ async function restartBot() {
   return startBot();
 }
 
+function runSmokeChild() {
+  console.log('[smoke-child] ready');
+  setTimeout(() => app.exit(0), 150);
+}
+
+function runPackagedSmokeTest() {
+  const runChild = () => new Promise((resolve, reject) => {
+    const args = app.isPackaged ? ['--smoke-child'] : [projectRoot(), '--smoke-child'];
+    const child = spawn(app.getPath('exe'), args, {
+      cwd: processWorkingDirectory(),
+      windowsHide: true,
+      env: process.env
+    });
+    let output = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error('Smoke child timed out'));
+    }, 15000);
+    child.stdout.on('data', chunk => { output += chunk.toString(); });
+    child.on('error', reject);
+    child.on('exit', code => {
+      clearTimeout(timer);
+      if (code === 0 && output.includes('[smoke-child] ready')) resolve();
+      else reject(new Error(`Smoke child failed (${code}): ${output}`));
+    });
+  });
+  return runChild()
+    .then(runChild)
+    .then(() => {
+      console.log('[smoke-test] PASS: packaged child start/stop/restart');
+      app.exit(0);
+    })
+    .catch(error => {
+      console.error(`[smoke-test] FAIL: ${error.stack || error}`);
+      app.exit(1);
+    });
+}
+
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
@@ -206,9 +326,28 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 }
 
+if (!isBotHost && !isSmokeTest && !isSmokeChild) {
+  const primaryStudio = app.requestSingleInstanceLock();
+  if (!primaryStudio) app.quit();
+  else app.on('second-instance', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  });
+}
+
 app.whenReady().then(() => {
   ensureUserFiles();
-  if (process.argv.includes('--bot-host')) {
+  if (isSmokeChild) {
+    runSmokeChild();
+    return;
+  }
+  if (isSmokeTest) {
+    runPackagedSmokeTest();
+    return;
+  }
+  if (isBotHost) {
     startEmbeddedBotHost();
     return;
   }
@@ -231,6 +370,8 @@ app.on('before-quit', event => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+process.once('exit', releaseBotHostLock);
 
 ipcMain.handle('studio:get-state', () => ({
   bot: botState,
