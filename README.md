@@ -2,6 +2,13 @@
 
 A local WhatsApp group-management bot with message-rate protection, reusable block/allow lists, membership-request automation, student-card OCR, review dashboards, and Excel exports.
 
+## Available editions
+
+- [`main`](../../tree/main) contains the current Windows Desktop / EXE edition.
+- [`classic-cli`](../../tree/classic-cli) preserves the previous command-line edition that runs with `npm start`.
+
+The classic branch remains available independently while Desktop development continues on `main`.
+
 ## Windows desktop application
 
 Version 3 introduces **WhatsApp Admin Studio**, an Electron desktop interface that can be packaged as a Windows EXE installer.

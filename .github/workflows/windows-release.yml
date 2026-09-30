@@ -1,0 +1,83 @@
+name: Windows release validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "desktop/**"
+      - "lib/**"
+      - "config/**"
+      - "ocr/**"
+      - "*.js"
+      - "package*.json"
+      - ".github/workflows/windows-release.yml"
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - "lib/**"
+      - "config/**"
+      - "ocr/**"
+      - "*.js"
+      - "package*.json"
+      - ".github/workflows/windows-release.yml"
+
+jobs:
+  validate-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate JavaScript
+        run: npm run check
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build unpacked Windows application
+        run: npm run pack:win
+
+      - name: Verify packaged OCR files
+        shell: pwsh
+        run: |
+          $asar = "release/win-unpacked/resources/app.asar"
+          $worker = "release/win-unpacked/resources/app.asar.unpacked/ocr/rapid_worker.py"
+          if (!(Test-Path $asar)) { throw "app.asar is missing" }
+          if (!(Test-Path $worker)) { throw "RapidOCR worker is missing" }
+          $listing = npx asar list $asar
+          if (!($listing -match "tesseract-core-simd-lstm.wasm")) { throw "SIMD-LSTM OCR core is missing" }
+          if (!($listing -match "tesseract-core-lstm.wasm")) { throw "Fallback LSTM OCR core is missing" }
+
+      - name: Run packaged restart smoke test
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path "release/win-unpacked/WhatsApp Admin Studio.exe"
+          $process = Start-Process -FilePath $exe -ArgumentList "--smoke-test" -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Packaged smoke test failed with exit code $($process.ExitCode)" }
+
+      - name: Build NSIS installer
+        run: npm run dist:win
+
+      - name: Upload validated Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhatsApp-Admin-Studio-Windows
+          path: |
+            release/WhatsApp-Admin-Studio-Setup-*.exe
+            release/latest*.yml
+          if-no-files-found: error
+          retention-days: 14

@@ -6,6 +6,7 @@ const { AdminAccess } = require('./lib/admin-access');
 const { CommandConfig } = require('./lib/command-config');
 const { RuntimeManager } = require('./lib/runtime-manager');
 const { startAdminDashboard } = require('./lib/admin-dashboard');
+const { MessageDeduper } = require('./lib/message-deduper');
 
 const RUNTIME_DIR = process.env.BOT_DATA_DIR || __dirname;
 fs.mkdirSync(RUNTIME_DIR, { recursive: true });
@@ -127,7 +128,7 @@ async function getKnownChats() {
 
 const lockedGroups = new Map();
 let maintenanceStarted = false;
-const processedMessageIds = new Set();
+const messageDeduper = new MessageDeduper();
 
 async function isOwner(message) {
   return adminAccess.isAllowedMessage(message, config);
@@ -770,12 +771,7 @@ async function processIncomingMessage(message) {
       if (group && group.isGroup) dashboardGroupCache.set(group.id._serialized, { id: group.id._serialized, name: group.name, participants: group.participants ? group.participants.length : null });
     } catch (_) {}
   }
-  const messageId = message.id?._serialized;
-  if (messageId && processedMessageIds.has(messageId)) return;
-  if (messageId) {
-    processedMessageIds.add(messageId);
-    setTimeout(() => processedMessageIds.delete(messageId), 60 * 1000).unref?.();
-  }
+  if (messageDeduper.isDuplicate(message)) return;
 
   console.log(`[incoming] from=${message.from || ''} author=${message.author || ''} body=${JSON.stringify(message.body || '')}`);
 
