@@ -49,3 +49,24 @@ This append-only file records AI-assisted repository changes, their validation, 
   - Runtime tests: NOT RUN — documentation/instruction-only change
 - **Result:** SUCCESS
 - **Known limitations/follow-up:** The rule is documented, but the one-time ownership claim workflow still needs to be implemented in the application.
+
+## 2026-09-30 — Remove seeded identity and add first-run owner claim
+
+- **Agent/tool:** Notion AI with GitHub MCP and local validation
+- **Request:** Remove the hardcoded owner identity, start with no administrators, add automatic one-time ownership claim, support WhatsApp account reset, and validate the upgrade-safe behavior before release.
+- **Branch/PR:** `feature/owner-claim-and-session-reset` / pending when this entry was written
+- **Scope:** Removed all current-file occurrences of the previously seeded phone/LID; disabled legacy runtime owner fallback; added automatic number/LID capture from a verified claim message; migrated the old seeded placeholder to an unclaimed state; added claim expiry, renewal, single-use behavior, privileged-command gating, connected-account display, and session reset that preserves settings; updated desktop, CLI, dashboards, documentation, and tests. OCR and command behavior were otherwise unchanged.
+- **Files:** `.env.example`, `README.md`, `BOT-UNDERSTANDING.md`, `bot.js`, `student-gate.js`, `config/admins.json`, `connect-dashboard.js`, `dashboard.html`, `desktop/index.html`, `desktop/main.js`, `desktop/preload.js`, `desktop/renderer.js`, `desktop/styles.css`, `docs/WINDOWS-APP.md`, `lib/admin-access.js`, `lib/admin-dashboard.js`, `lib/owner-claim.js`, `lib/session-data.js`, `package.json`, `test/admin-access.test.js`, `test/owner-claim.test.js`, `test/session-data.test.js`, `AI-CHANGELOG.md`
+- **Behavior:** A fresh or migrated installation requires the intended owner to send a short-lived `!claim` command. The bot records usable WhatsApp identifiers automatically, never logs the claim command, and allows changing or repairing the bot account without deleting configuration.
+- **Validation:**
+  - `npm run check`: PASS — all application and desktop JavaScript passed syntax validation
+  - `npm test`: PASS — 18 tests passed, including claim, migration, legacy-fallback denial, and session-preservation tests
+  - `git diff --check`: PASS — no whitespace errors
+  - Personal-identifier scan: PASS — no current-file occurrence of the removed phone number or LID outside the append-only historical ledger
+  - Desktop visual QA at 1440×900: PASS — owner claim is visually prominent and readable
+  - Minimum-window visual QA at 1040×680: PASS — Studio automatically focuses the required setup panel without clipping or horizontal overflow
+  - Settings visual QA at 1440×900: PASS — connected account and session-reset controls are clear
+  - GitHub `validate-windows` workflow: NOT RUN — runs after the pull request is opened
+  - Real WhatsApp claim and update test: NOT RUN — requires a human WhatsApp account
+- **Result:** PARTIAL
+- **Known limitations/follow-up:** Merge only after Windows validation succeeds. A human must complete one real QR, claim, restart, and upgrade test before publishing the installer.

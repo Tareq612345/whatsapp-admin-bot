@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 2,
   "roles": {
     "owner": {
       "label": "Owner",
@@ -20,18 +21,11 @@
       "allowedCommands": ["help", "ping", "status", "group-info", "lock", "unlock", "member-check"]
     }
   },
-  "admins": [
-    {
-      "id": "primary-owner",
-      "name": "Primary owner",
-      "number": "201040224684",
-      "lids": ["35816386629826"],
-      "role": "owner",
-      "enabled": true,
-      "allowedCommands": [],
-      "deniedCommands": []
-    }
-  ],
+  "admins": [],
+  "setup": {
+    "requiresOwnerClaim": true,
+    "ownerClaimedAt": null
+  },
   "members": {
     "enabled": true,
     "allowedCommands": ["help", "ping"]

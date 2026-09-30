@@ -7,10 +7,12 @@ const { CommandConfig } = require('./lib/command-config');
 const { RuntimeManager } = require('./lib/runtime-manager');
 const { startAdminDashboard } = require('./lib/admin-dashboard');
 const { MessageDeduper } = require('./lib/message-deduper');
+const { OwnerClaimManager } = require('./lib/owner-claim');
 
 const RUNTIME_DIR = process.env.BOT_DATA_DIR || __dirname;
 fs.mkdirSync(RUNTIME_DIR, { recursive: true });
 const CONFIG_PATH = path.join(RUNTIME_DIR, 'config.json');
+const ADMIN_PATH = path.join(process.env.BOT_CONFIG_DIR || path.join(__dirname, 'config'), 'admins.json');
 
 function desktopEvent(type, payload = {}) {
   if (process.env.BOT_DESKTOP_EVENTS === '1') {
@@ -18,9 +20,6 @@ function desktopEvent(type, payload = {}) {
   }
 }
 const DEFAULT_CONFIG = {
-  ownerNumber: '201040224684',
-  // WhatsApp is currently exposing this account as a LID.
-  ownerLids: ['35816386629826'],
   dryRun: true,
   blockedGroupId: null,
   allowGroupId: null,
@@ -46,7 +45,6 @@ function loadConfig() {
       ...DEFAULT_CONFIG,
       ...saved,
       rateLimit: { ...DEFAULT_CONFIG.rateLimit, ...(saved.rateLimit || {}) },
-      ownerLids: saved.ownerLids || DEFAULT_CONFIG.ownerLids,
       targetGroupIds: saved.targetGroupIds || [],
       approvalGroupIds: saved.approvalGroupIds || [],
       exceptions: saved.exceptions || [],
@@ -58,6 +56,18 @@ function loadConfig() {
 }
 
 let config = loadConfig();
+const ownerClaim = new OwnerClaimManager({
+  file: ADMIN_PATH,
+  onIssued: claim => {
+    desktopEvent('owner-claim-required', claim);
+    if (process.env.BOT_DESKTOP_EVENTS !== '1') {
+      console.log(`Owner setup required. Send !claim ${claim.code} from the intended owner account.`);
+    }
+  },
+  onClaimed: owner => desktopEvent('owner-claimed', {
+    owner: { name: owner.name, number: owner.number || null }
+  })
+});
 const adminAccess = new AdminAccess();
 const commandConfig = new CommandConfig();
 
@@ -358,9 +368,14 @@ async function syncBlocked(targetOnly = null) {
 async function clearGroup(chat) {
   const result = { total: 0, removed: 0, wouldRemove: 0, kept: 0 };
   if (!chat) return result;
-  const ownerKey = digits(config.ownerNumber);
   const botKey = personKey(botId());
-  const ownerLids = (config.ownerLids || []).map(digits);
+  const ownerKeys = new Set(
+    adminAccess.reload().admins
+      .filter(admin => admin.enabled !== false && admin.role === 'owner')
+      .flatMap(admin => [admin.number, ...(admin.lids || [])])
+      .map(digits)
+      .filter(Boolean)
+  );
   const adminKeys = new Set(
     (chat.participants || [])
       .filter(person => person && (person.isAdmin || person.isSuperAdmin))
@@ -371,8 +386,7 @@ async function clearGroup(chat) {
   const victims = all.filter(id => {
     const key = personKey(id);
     if (key === botKey) return false;
-    if (ownerKey && key === ownerKey) return false;
-    if (ownerLids.includes(key)) return false;
+    if (ownerKeys.has(key)) return false;
     if (adminKeys.has(key)) return false;
     return true;
   });
@@ -535,7 +549,7 @@ async function handleCommand(message) {
         return respond( 'pong - البوت يعمل.');
       case '!status':
         return respond( `الحالة:
-المالك: ${config.ownerNumber}
+المالك: ${adminAccess.reload().admins.some(admin => admin.enabled !== false && admin.role === 'owner') ? 'Configured' : 'Not configured'}
 Dry-run: ${config.dryRun ? 'ON' : 'OFF'}
 الموافقة: ${config.approvalEnabled ? 'ON' : 'OFF'}
 وضع الموافقة: ${config.approvalMode}
@@ -748,7 +762,15 @@ client.on('loading_screen', (percent, message) => {
 });
 
 client.on('ready', () => {
-  desktopEvent('ready');
+  const wid = client.info?.wid;
+  const rawId = wid?._serialized || '';
+  desktopEvent('ready', {
+    account: {
+      name: client.info?.pushname || 'WhatsApp account',
+      number: rawId.endsWith('@c.us') ? digits(wid.user || rawId) : null
+    }
+  });
+  ownerClaim.current();
   console.log('WhatsApp Admin Bot جاهز.');
   if (maintenanceStarted) return;
   maintenanceStarted = true;
@@ -782,6 +804,27 @@ async function processIncomingMessage(message) {
   }
   if (messageDeduper.isDuplicate(message)) return;
 
+  const body = String(message.body || '').trim();
+  const escapedPrefix = commandConfig.prefix().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const claimMatch = body.match(new RegExp(`^${escapedPrefix}claim\\s+(\\d{6})$`, 'i'));
+  if (claimMatch) {
+    const result = await ownerClaim.claim(message, claimMatch[1]);
+    adminAccess.reload(true);
+    const responses = {
+      invalid: 'Invalid owner claim code.',
+      expired: 'This owner claim code expired. Generate a new code in Admin Studio.',
+      'already-configured': 'An owner is already configured.',
+      'identity-unavailable': 'WhatsApp did not provide an account identity. Try again from a group message.'
+    };
+    await reply(
+      message,
+      result.ok
+        ? 'Owner setup completed. This account can now use administrator commands.'
+        : responses[result.reason] || 'Owner setup could not be completed.'
+    );
+    return;
+  }
+
   console.log(`[incoming] from=${message.from || ''} author=${message.author || ''} body=${JSON.stringify(message.body || '')}`);
 
   // Commands run first. A WhatsApp chat refresh must not block !ping.
@@ -803,7 +846,12 @@ async function processIncomingMessage(message) {
 client.on('message', processIncomingMessage);
 
 const runtime = new RuntimeManager(client, {
-  ownerChatId: () => jidFromNumber(config.ownerNumber)
+  ownerChatId: () => {
+    const owner = adminAccess.reload().admins.find(admin =>
+      admin.enabled !== false && admin.role === 'owner' && admin.number
+    );
+    return jidFromNumber(owner?.number);
+  }
 });
 
 saveConfig();
@@ -834,12 +882,35 @@ async function installWhatsAppCompatibilityPatch() {
 }
 client.on('ready', installWhatsAppCompatibilityPatch);
 
+if (process.env.BOT_DESKTOP_EVENTS === '1' && process.stdin) {
+  process.stdin.setEncoding('utf8');
+  let desktopInput = '';
+  process.stdin.on('data', chunk => {
+    desktopInput += chunk;
+    const lines = desktopInput.split(/\r?\n/);
+    desktopInput = lines.pop() || '';
+    for (const line of lines) {
+      try {
+        const request = JSON.parse(line);
+        if (request.type === 'renew-owner-claim') ownerClaim.issue();
+      } catch (error) {
+        console.error('Desktop command ignored:', error.message);
+      }
+    }
+  });
+}
+
+ownerClaim.current();
+
 
 
 // LOCAL_DASHBOARD_BRIDGE
 startAdminDashboard({
   client,
   getConfig: () => config,
+  getOwner: () => adminAccess.reload().admins.find(admin =>
+    admin.enabled !== false && admin.role === 'owner'
+  ) || null,
   saveConfig,
   saveBlockedGroupIds,
   dashboardGroupCache,

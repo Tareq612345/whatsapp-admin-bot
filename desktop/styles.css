@@ -76,6 +76,27 @@ p { color: var(--muted); }
 .login-copy h3, .login-copy p { margin-bottom: 2px; }
 .login-copy small { color: var(--muted); }
 .login-actions { display: flex; gap: 8px; }
+.owner-setup { margin: 18px 0; padding: 22px; border: 1px solid #e6c9a8; border-left: 4px solid var(--orange); border-radius: 10px; background: #fffaf5; }
+.owner-setup[hidden] { display: none; }
+.setup-head { display: flex; justify-content: space-between; gap: 24px; }
+.setup-head p { max-width: 760px; margin-bottom: 0; }
+.setup-status { flex: 0 0 auto; height: fit-content; padding: 6px 9px; border-radius: 7px; color: #9b5d28; background: var(--orange-soft); font-size: 12px; font-weight: 700; }
+.claim-layout { display: grid; grid-template-columns: 210px 1fr; gap: 28px; align-items: center; margin-top: 20px; }
+.claim-code-block { padding: 16px; border: 1px solid #ead7c4; border-radius: 8px; background: #fff; }
+.claim-code-block span, .claim-code-block strong, .claim-code-block small { display: block; }
+.claim-code-block span { color: var(--muted); font-size: 12px; font-weight: 650; }
+.claim-code-block strong { margin: 6px 0; font: 700 30px/1.2 Consolas, monospace; letter-spacing: .12em; }
+.claim-code-block small { color: var(--green); }
+.claim-code-block small.expired { color: var(--red); }
+.claim-steps { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin: 0; padding: 0; list-style: none; }
+.claim-steps li { display: grid; grid-template-columns: 28px 1fr; gap: 9px; }
+.claim-steps li > span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; color: #9b5d28; background: var(--orange-soft); font-weight: 750; }
+.claim-steps strong, .claim-steps small, .claim-steps code { display: block; }
+.claim-steps small { color: var(--muted); }
+.claim-steps code { margin-top: 4px; color: var(--blue); font-weight: 700; }
+.setup-actions { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding-top: 16px; border-top: 1px solid #ead7c4; }
+.setup-actions p { margin: 0 0 0 auto; max-width: 480px; font-size: 12px; text-align: right; }
+.danger-button { color: var(--red) !important; border-color: #f0cfcb !important; }
 .metric-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin: 18px 0; }
 .metric, .panel, .admin-card, .role-card, .command-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.025); }
 .metric { padding: 18px; }
@@ -181,6 +202,10 @@ dialog::backdrop { background: rgba(25,25,25,.44); backdrop-filter: blur(2px); }
   .command-card label:last-child { grid-column: 1/-1; }
   .login-panel { grid-template-columns: auto 1fr; }
   .login-actions { grid-column: 1/-1; padding-left: 62px; }
+  .claim-layout { grid-template-columns: 180px 1fr; }
+  .claim-steps { grid-template-columns: 1fr; }
+  .setup-actions { align-items: flex-start; flex-wrap: wrap; }
+  .setup-actions p { width: 100%; max-width: none; margin-left: 0; text-align: left; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }

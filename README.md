@@ -103,30 +103,21 @@ npm start
 
 Alternatively, run `update-and-start.cmd`. On first launch, scan the terminal QR code. The session is saved in `.wwebjs_auth`.
 
-## Administrator numbers
+## Owner and administrator access
 
-Only numbers listed in [`config/admins.json`](config/admins.json) can execute commands:
+New installations contain no hardcoded owner, phone number, or WhatsApp LID. After connecting WhatsApp, Admin Studio displays a short-lived owner command such as `!claim 482917`. Send that command from the WhatsApp account that should become Owner in a group containing the bot.
 
-```json
-{
-  "numbers": ["201040224684", "201111111111"],
-  "lids": ["35816386629826"]
-}
-```
+The bot records the verified phone identity and any internal WhatsApp LID automatically. Users never need to find or type an LID. The code expires after ten minutes, works once, and is not written to the activity log.
 
-- Use international format without `+`, spaces, or dashes.
-- `numbers` contains normal WhatsApp numbers.
-- `lids` contains WhatsApp Linked IDs when WhatsApp hides a sender behind an LID.
-- The file reloads automatically when it changes; no restart is needed.
-- Legacy `ownerNumber` and `ownerLids` values in `config.json` remain supported as fallbacks.
+Additional administrators can be added from **Administrators** after the owner claim is complete. Administrator settings reload automatically.
 
 ## First-time setup
 
-1. Start the bot and scan the QR code.
-2. Make the bot an admin in the groups it will manage.
-3. Add administrators to `config/admins.json`.
-4. Keep dry-run enabled.
-5. Send `!ping` and `!status` from an administrator account.
+1. Start Studio and scan the WhatsApp QR code.
+2. Copy the one-time owner command shown in Studio.
+3. Send it from the intended owner's WhatsApp account in a group containing the bot.
+4. Make the bot an admin in the groups it will manage.
+5. Keep dry-run enabled and test `!ping` and `!status`.
 6. Configure block-list, allow-list, target, and approval groups.
 7. Test synchronization and approvals.
 8. Disable dry-run only after checking the expected actions.
