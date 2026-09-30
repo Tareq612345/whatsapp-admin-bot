@@ -1,0 +1,140 @@
+# WhatsApp Admin Studio for Windows
+
+WhatsApp Admin Studio is the desktop control center for the bot. It packages the existing Node.js runtime with Electron and provides an NSIS installer for 64-bit Windows.
+
+## Included in the first desktop release
+
+- Guided QR login inside the application.
+- Start, stop, and restart controls for the bot process.
+- Live connection state and process output.
+- Windows auto-start.
+- Buttons for the Admin Dashboard and Student Gate.
+- Administrator management without editing JSON by hand.
+- Built-in roles: Owner, Administrator, and Moderator.
+- Per-administrator command grants and restrictions.
+- Commands available to regular members.
+- Custom command prefix.
+- Enable or disable any command.
+- Multiple aliases for every command.
+- Reply override for every command.
+- Editable global replies for unknown, disabled, and unauthorized commands.
+- Local configuration and runtime data stored under Electron's user-data directory.
+
+## Development
+
+Install dependencies:
+
+```powershell
+npm install
+```
+
+Start the desktop application:
+
+```powershell
+npm run desktop
+```
+
+The desktop main process starts the bot in a separate Electron-as-Node child process. Closing the application requests a graceful shutdown and force-stops the process only if it does not exit within eight seconds.
+
+## Build the EXE installer
+
+On a 64-bit Windows machine:
+
+```powershell
+npm install
+npm run dist:win
+```
+
+The installer is written to:
+
+```text
+release/WhatsApp-Admin-Studio-Setup-3.0.0-beta.1.exe
+```
+
+The NSIS installer:
+
+- lets the user choose the installation directory;
+- creates Desktop and Start Menu shortcuts;
+- keeps local application data when the program is uninstalled;
+- installs only the 64-bit build.
+
+## Portable build for testing
+
+```powershell
+npm run pack:win
+```
+
+This creates an unpacked application under `release/win-unpacked`. Run the executable from that folder before distributing an installer.
+
+## Local data
+
+The packaged application does not write runtime data into its installation folder. It uses Electron's user-data directory for:
+
+```text
+config/admins.json
+config/commands.json
+config.json
+verification-config.json
+.wwebjs_auth/
+data/students.sqlite
+data/*.xlsx
+```
+
+Use **Settings → Open folder** to open the exact directory.
+
+## Administrator and role model
+
+`config/admins.json` contains:
+
+- `roles`: reusable command permission sets;
+- `admins`: WhatsApp numbers, LIDs, role assignments, direct grants, and explicit restrictions;
+- `members`: commands available to users who are not administrators.
+
+Permission order:
+
+1. A disabled account is treated as a member.
+2. Explicit `deniedCommands` always wins.
+3. A role can grant one command or `*` for every command.
+4. `allowedCommands` on an administrator grants extra commands.
+5. Non-administrators receive only `members.allowedCommands`.
+
+## Command customization
+
+`config/commands.json` controls:
+
+- `prefix`: up to three characters;
+- `enabled`: whether the command can run;
+- `aliases`: alternate names without the prefix;
+- `reply`: optional response override.
+
+Use `{{default}}` in an override to keep the original dynamic reply:
+
+```text
+✅ Completed
+
+{{default}}
+```
+
+Available common placeholders:
+
+- `{{default}}`: the original runtime response;
+- `{{prefix}}`: the current command prefix;
+- `{{command}}`: the canonical command name.
+
+Changes to administrators and commands are reloaded by the running bot automatically.
+
+## QR and process events
+
+When launched by Studio, the bot writes structured events to standard output. Studio recognizes QR, ready, disconnected, and authentication-failure events. The QR value is rendered locally and is not sent to an external service.
+
+## Before public distribution
+
+The application can be built and tested without signing, but Windows may display a SmartScreen warning. For broad distribution:
+
+1. Obtain a Windows code-signing certificate.
+2. Configure electron-builder signing credentials through environment variables.
+3. Build the installer in a controlled release workflow.
+4. Sign each published installer.
+5. Add automatic updates only after signed release artifacts are available.
+
+NSIS is the selected installer format because it supports the intended Windows installation and later auto-update path.
