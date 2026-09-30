@@ -1,6 +1,6 @@
 # WhatsApp Admin Bot
 
-[![Windows release validation](https://github.com/Tareq612345/whatsapp-admin-bot/actions/workflows/windows-release.yml/badge.svg)](https://github.com/Tareq612345/whatsapp-admin-bot/actions/workflows/windows-release.yml)
+[![Windows release](https://github.com/Tareq612345/whatsapp-admin-bot/actions/workflows/publish-v0.1.0.yml/badge.svg)](https://github.com/Tareq612345/whatsapp-admin-bot/actions/workflows/publish-v0.1.0.yml)
 [![Latest release](https://img.shields.io/github/v/release/Tareq612345/whatsapp-admin-bot?include_prereleases&label=release)](https://github.com/Tareq612345/whatsapp-admin-bot/releases)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11-287fd1)](https://github.com/Tareq612345/whatsapp-admin-bot/releases)
 [![Node.js](https://img.shields.io/badge/Node.js-22.13%2B-46a171)](package.json)
@@ -23,7 +23,7 @@ The classic branch remains available independently while Desktop development con
 
 ## Windows desktop application
 
-Version `0.1.x` introduces **WhatsApp Admin Studio**, an Electron desktop interface packaged as a Windows EXE installer.
+Version `0.1.x` introduces **WhatsApp Admin Studio**, an Electron desktop interface that can be packaged as a Windows EXE installer.
 
 ```powershell
 npm install
