@@ -12,7 +12,7 @@ let botState = { status: 'stopped', pid: null, startedAt: null, lastExit: null }
 const logs = [];
 
 function projectRoot() {
-  return app.isPackaged ? path.join(process.resourcesPath, 'app') : path.join(__dirname, '..');
+  return app.isPackaged ? path.join(process.resourcesPath, 'app.asar') : path.join(__dirname, '..');
 }
 
 function dataPaths() {
@@ -67,6 +67,9 @@ function startEmbeddedBotHost() {
   process.env.BOT_DESKTOP_EVENTS = '1';
   process.env.BOT_DATA_DIR = dataPaths().dataRoot;
   process.env.BOT_CONFIG_DIR = dataPaths().configRoot;
+  process.env.BOT_OCR_WORKER = app.isPackaged
+    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'ocr', 'rapid_worker.py')
+    : path.join(projectRoot(), 'ocr', 'rapid_worker.py');
   whatsappWindow = new BrowserWindow({
     show: false,
     width: 1100,

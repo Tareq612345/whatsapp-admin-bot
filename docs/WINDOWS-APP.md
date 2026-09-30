@@ -48,7 +48,7 @@ npm run dist:win
 The installer is written to:
 
 ```text
-release/WhatsApp-Admin-Studio-Setup-3.0.0-beta.1.exe
+release/WhatsApp-Admin-Studio-Setup-3.0.0-beta.2.exe
 ```
 
 The NSIS installer:
@@ -138,3 +138,17 @@ The application can be built and tested without signing, but Windows may display
 5. Add automatic updates only after signed release artifacts are available.
 
 NSIS is the selected installer format because it supports the intended Windows installation and later auto-update path.
+
+## Slim packaging and OCR
+
+The `3.0.0-beta.2` build uses a production allow-list, ASAR packaging, maximum compression, and only the `en-US` Electron runtime locale. Documentation, tests, development files, duplicate WhatsApp runtimes, and unused application files are not packaged.
+
+OCR remains part of the Slim build:
+
+- Tesseract.js and `tesseract.js-core` stay bundled as the dependable local fallback.
+- Arabic and English recognition remain enabled.
+- The RapidOCR Python worker remains available in the unpacked OCR resources.
+- RapidOCR uses a virtual environment under the writable application-data directory when one is installed.
+- If RapidOCR is unavailable, image processing automatically falls back to Tesseract instead of disabling Student Gate.
+
+The first Tesseract recognition may download Arabic and English language data and cache it locally. Later recognition reuses that cache.

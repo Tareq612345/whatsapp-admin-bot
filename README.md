@@ -19,6 +19,8 @@ npm run dist:win
 
 The desktop application provides QR login, process controls, Windows auto-start, administrator and role management, per-user permissions, member commands, aliases, editable replies, activity logs, and direct access to both dashboards. See [`docs/WINDOWS-APP.md`](docs/WINDOWS-APP.md) for the complete desktop guide.
 
+The Slim desktop build keeps Arabic/English OCR and the RapidOCR worker while removing duplicate runtimes, extra Electron locales, tests, documentation, and other development-only files from the packaged application.
+
 > This project uses `whatsapp-web.js` and automates a normal WhatsApp account through WhatsApp Web. It is not an official WhatsApp Business API integration.
 
 ## Features
