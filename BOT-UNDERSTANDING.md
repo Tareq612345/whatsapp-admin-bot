@@ -5,7 +5,7 @@
 - Repository: `Tareq612345/whatsapp-admin-bot`
 - Document created: 2026-09-23
 - Document scope: active code in the repository root on `main`
-- Important: the nested `whatsapp-admin-bot/` directory is a legacy copy and is not the active runtime used by the root `package.json`.
+- Current architecture: active code lives only at the repository root; legacy duplicate and backup files were removed in version 2.4.0.
 
 ---
 
@@ -14,7 +14,7 @@
 This is a local WhatsApp Web administration bot with two related systems:
 
 1. **Group administration**
-   - Owner-only WhatsApp commands.
+   - Multi-administrator WhatsApp commands controlled by `config/admins.json`.
    - Group message-rate protection.
    - Temporary group locking and unlocking.
    - Blacklist synchronization across target groups.
@@ -69,8 +69,22 @@ The load order matters because several files patch shared runtime behavior befor
 
 5. `bot.js`
    - Creates the `whatsapp-web.js` client.
-   - Registers the main commands, rate monitor, QR handler, lifecycle handlers, and port-3000 dashboard.
+   - Registers the main commands, rate monitor, QR handler, and compatibility patch.
+   - Delegates administrator access to `lib/admin-access.js`.
+   - Delegates the port-3000 dashboard to `lib/admin-dashboard.js`.
+   - Uses `lib/runtime-manager.js` and `lib/lifecycle.js` for reconnection, health, alerts, and graceful shutdown.
    - Calls `client.initialize()`.
+
+---
+
+## 2.1 Runtime modules added in version 2.4.0
+
+- `config/admins.json`: phone numbers and WhatsApp LIDs allowed to execute commands. It is reloaded when its modification time changes.
+- `lib/admin-access.js`: normalizes senders, reads the administrator file, and keeps legacy owner settings as fallbacks.
+- `lib/admin-dashboard.js`: owns the port-3000 HTTP server, action routing, status, logs, groups, and `/api/health`.
+- `lib/lifecycle.js`: registers service health providers and cleanup callbacks shared by the main bot and Student Gate.
+- `lib/runtime-manager.js`: tracks readiness, reconnects with bounded exponential backoff, reports runtime health, notifies after recovery, and handles `SIGINT`/`SIGTERM`.
+- `test/`: contains offline unit tests for administrator access, Arabic normalization, rule matching, and card parsing.
 
 ---
 
