@@ -11,16 +11,6 @@ on:
       - "*.js"
       - "package*.json"
       - ".github/workflows/windows-release.yml"
-  push:
-    branches: [main]
-    paths:
-      - "desktop/**"
-      - "lib/**"
-      - "config/**"
-      - "ocr/**"
-      - "*.js"
-      - "package*.json"
-      - ".github/workflows/windows-release.yml"
 
 jobs:
   validate-windows:
