@@ -19,6 +19,8 @@ WhatsApp Admin Studio is the desktop control center for the bot. It packages the
 - Reply override for every command.
 - Editable global replies for unknown, disabled, and unauthorized commands.
 - Local configuration and runtime data stored under Electron's user-data directory.
+- One-time owner claim with automatic phone/LID capture.
+- Safe WhatsApp session reset for changing accounts or recovering from an invalid session.
 
 ## Development
 
@@ -130,6 +132,22 @@ When launched by Studio, the bot writes structured events to standard output. St
 On first launch, Studio displays a guided QR sign-in panel and opens the QR dialog when the code is ready. In WhatsApp, open **Linked devices → Link a device** and scan the code. The desktop status changes from login required, to loading, to connected.
 
 The authenticated WhatsApp session is stored under Electron's stable user-data directory in `.wwebjs_auth/`. It is outside the installation directory, and the NSIS configuration keeps application data during uninstall. Installing a newer version over the existing version therefore reuses the same session automatically. A new QR is needed only when WhatsApp invalidates the linked device, the user logs it out, or the application-data folder is removed.
+
+## First owner setup
+
+New installations start with no owner identity. Studio generates a six-digit command that expires after ten minutes:
+
+```text
+!claim 482917
+```
+
+Send the command from the intended owner's WhatsApp account in a group containing the bot. The bot captures the sender's verified phone identity and internal WhatsApp LID automatically. The LID is never requested from the user or shown in the interface. The claim works once, is invalidated immediately after success, and is excluded from the activity log.
+
+Privileged commands remain blocked until the owner claim succeeds. A previously seeded placeholder owner from an older desktop build is removed during migration and must be claimed properly.
+
+## Change or repair the WhatsApp account
+
+Use **Settings → WhatsApp account → Disconnect and show new QR** to stop the bot, remove only the saved WhatsApp session/cache, and start a fresh QR login. Administrators, commands, Student Gate data, and other settings are preserved.
 
 ## Before public distribution
 

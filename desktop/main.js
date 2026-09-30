@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const QRCode = require('qrcode');
 const { createLineDecoder } = require('../lib/desktop-events');
+const { removeWhatsAppSession, whatsappSessionPaths } = require('../lib/session-data');
 
 let mainWindow;
 let whatsappWindow;
@@ -17,6 +18,12 @@ let authState = {
   qrDataUrl: null,
   message: 'Starting the WhatsApp connection…',
   updatedAt: new Date().toISOString()
+};
+let setupState = {
+  ownerConfigured: false,
+  claimCode: null,
+  expiresAt: null,
+  owner: null
 };
 const logs = [];
 const isBotHost = process.argv.includes('--bot-host');
@@ -35,11 +42,14 @@ function processWorkingDirectory() {
 
 function dataPaths() {
   const dataRoot = app.getPath('userData');
+  const session = whatsappSessionPaths(dataRoot);
   return {
     dataRoot,
     configRoot: path.join(dataRoot, 'config'),
     admins: path.join(dataRoot, 'config', 'admins.json'),
-    commands: path.join(dataRoot, 'config', 'commands.json')
+    commands: path.join(dataRoot, 'config', 'commands.json'),
+    whatsappSession: session.auth,
+    whatsappCache: session.cache
   };
 }
 
@@ -50,6 +60,29 @@ function ensureUserFiles() {
     const target = path.join(paths.configRoot, name);
     if (!fs.existsSync(target)) fs.copyFileSync(path.join(projectRoot(), 'config', name), target);
   }
+}
+
+function setupFromDisk() {
+  try {
+    const data = JSON.parse(fs.readFileSync(dataPaths().admins, 'utf8'));
+    const owner = (data.admins || []).find(admin =>
+      admin.enabled !== false && admin.role === 'owner'
+    );
+    return {
+      ...setupState,
+      ownerConfigured: Boolean(owner),
+      owner: owner ? { name: owner.name || 'Owner', number: owner.number || null } : null,
+      claimCode: owner ? null : setupState.claimCode,
+      expiresAt: owner ? null : setupState.expiresAt
+    };
+  } catch {
+    return { ...setupState };
+  }
+}
+
+function setSetupState(updates) {
+  setupState = { ...setupState, ...updates };
+  send('setup-state', setupState);
 }
 
 function pidIsRunning(pid) {
@@ -168,6 +201,7 @@ async function processDesktopEvent(line) {
       setAuthState('ready', {
         qrDataUrl: null,
         percent: 100,
+        account: event.account || null,
         message: 'WhatsApp is connected. Your saved session will be reused automatically.'
       });
     }
@@ -183,6 +217,22 @@ async function processDesktopEvent(line) {
       setAuthState('disconnected', {
         qrDataUrl: null,
         message: `Connection lost${event.reason ? `: ${event.reason}` : ''}. Reconnecting…`
+      });
+    }
+    if (event.type === 'owner-claim-required') {
+      setSetupState({
+        ownerConfigured: false,
+        owner: null,
+        claimCode: event.code,
+        expiresAt: event.expiresAt
+      });
+    }
+    if (event.type === 'owner-claimed') {
+      setSetupState({
+        ownerConfigured: true,
+        owner: event.owner || null,
+        claimCode: null,
+        expiresAt: null
       });
     }
     send('bot-event', event);
@@ -330,6 +380,28 @@ async function restartBot() {
   return startBot();
 }
 
+async function renewOwnerClaim() {
+  if (!botProcess?.stdin?.writable) {
+    await restartBot();
+    return setupState;
+  }
+  botProcess.stdin.write(`${JSON.stringify({ type: 'renew-owner-claim' })}\n`);
+  return setupState;
+}
+
+async function resetWhatsAppSession() {
+  await stopBot();
+  const paths = dataPaths();
+  removeWhatsAppSession(paths.dataRoot);
+  setAuthState('starting', {
+    qrDataUrl: null,
+    account: null,
+    percent: null,
+    message: 'Saved WhatsApp login removed. Preparing a new QR code…'
+  });
+  return startBot();
+}
+
 function runSmokeChild() {
   console.log('[smoke-child] ready');
   setTimeout(() => app.exit(0), 150);
@@ -448,16 +520,31 @@ process.once('exit', releaseBotHostLock);
 ipcMain.handle('studio:get-state', () => ({
   bot: botState,
   auth: authState,
+  setup: setupFromDisk(),
   logs,
   autoStart: app.getLoginItemSettings().openAtLogin,
   version: app.getVersion(),
   paths: dataPaths()
 }));
 ipcMain.handle('studio:read-config', (_, name) => readJson(name === 'admins' ? dataPaths().admins : dataPaths().commands));
-ipcMain.handle('studio:save-config', (_, name, value) => writeJson(name === 'admins' ? dataPaths().admins : dataPaths().commands, value));
+ipcMain.handle('studio:save-config', (_, name, value) => {
+  if (name === 'admins') {
+    const current = readJson(dataPaths().admins);
+    const addsUnclaimedOwner = !current.setup?.ownerClaimedAt &&
+      (value.admins || []).some(admin => admin.enabled !== false && admin.role === 'owner');
+    if (addsUnclaimedOwner) {
+      throw new Error('Complete the one-time owner claim before adding an Owner account.');
+    }
+  }
+  const result = writeJson(name === 'admins' ? dataPaths().admins : dataPaths().commands, value);
+  if (name === 'admins') setSetupState(setupFromDisk());
+  return result;
+});
 ipcMain.handle('studio:start-bot', () => startBot());
 ipcMain.handle('studio:stop-bot', () => stopBot());
 ipcMain.handle('studio:restart-bot', () => restartBot());
+ipcMain.handle('studio:renew-owner-claim', () => renewOwnerClaim());
+ipcMain.handle('studio:reset-whatsapp-session', () => resetWhatsAppSession());
 ipcMain.handle('studio:set-auto-start', (_, enabled) => {
   app.setLoginItemSettings({ openAtLogin: Boolean(enabled), path: process.execPath });
   return app.getLoginItemSettings().openAtLogin;

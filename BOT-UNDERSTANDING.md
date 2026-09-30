@@ -130,8 +130,8 @@ The current message pipeline listens to both `message` and `message_create`; `pr
 
 Important current configuration concepts:
 
-- `ownerNumber`
-- `ownerLids`
+- Owner identity is stored in `config/admins.json` after a one-time `!claim` flow.
+- WhatsApp LIDs are captured automatically from the verified claim message and are never entered manually.
 - `dryRun`
 - `blockedGroupId` and/or `blockedGroupIds`
 - `allowGroupId`

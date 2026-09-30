@@ -69,6 +69,33 @@
           <button class="button secondary" id="retryLogin">Retry connection</button>
         </div>
       </section>
+      <section class="owner-setup" id="ownerSetup" aria-live="polite">
+        <div class="setup-head">
+          <div>
+            <p class="eyebrow">REQUIRED · FINAL SETUP STEP</p>
+            <h3>Claim the owner account</h3>
+            <p>Send the one-time command from the WhatsApp account that should control administrator commands. Studio records the phone identity and internal LID automatically.</p>
+          </div>
+          <span class="setup-status" id="ownerStatus">Owner not configured</span>
+        </div>
+        <div class="claim-layout">
+          <div class="claim-code-block">
+            <span>One-time code</span>
+            <strong id="claimCode">------</strong>
+            <small id="claimExpiry">Preparing code…</small>
+          </div>
+          <ol class="claim-steps">
+            <li><span>1</span><div><strong>Connect WhatsApp</strong><small>Complete the QR login above.</small></div></li>
+            <li><span>2</span><div><strong>Open a group containing the bot</strong><small>Use the WhatsApp account that will become Owner.</small></div></li>
+            <li><span>3</span><div><strong>Send this exact command</strong><code id="claimCommand">!claim ------</code></div></li>
+          </ol>
+        </div>
+        <div class="setup-actions">
+          <button class="button primary" id="copyClaim" disabled>Copy owner command</button>
+          <button class="button secondary" id="renewClaim">Generate new code</button>
+          <p>The code works once and is never added to the activity log. Privileged commands remain blocked until setup is complete.</p>
+        </div>
+      </section>
       <div class="metric-grid">
         <article class="metric"><span>Connection</span><strong id="metricConnection">Starting</strong><small>Live runtime state</small></article>
         <article class="metric"><span>Administrators</span><strong id="metricAdmins">—</strong><small>Enabled accounts</small></article>
@@ -127,6 +154,7 @@
         <article class="panel setting-card"><div><h3>Start with Windows</h3><p>Launch Admin Studio automatically after signing in.</p></div><label class="switch-row"><input type="checkbox" id="autoStart"><i></i></label></article>
         <article class="panel setting-card"><div><h3>Local data</h3><p>Open configuration, session, database, and export files.</p></div><button class="button secondary" id="openData">Open folder</button></article>
         <article class="panel setting-card danger"><div><h3>Bot process</h3><p>Stop or restart the WhatsApp engine without closing Studio.</p></div><div><button class="button secondary" id="stopBot">Stop</button> <button class="button primary" id="startBot">Start</button></div></article>
+        <article class="panel setting-card"><div><h3>WhatsApp account</h3><p id="connectedAccount">Not connected</p><p>Disconnect only when changing the bot account or repairing a rejected session.</p></div><button class="button secondary danger-button" id="resetSession">Disconnect and show new QR</button></article>
       </div>
       <div class="panel global-replies">
         <div class="panel-head"><div><h3>Global command messages</h3><p>Used for unknown, disabled, or unauthorized commands.</p></div><button class="button secondary" id="saveGlobals">Save messages</button></div>
@@ -147,7 +175,6 @@
         <label>Display name<input id="adminName" required placeholder="e.g. Group manager"></label>
         <label>WhatsApp number<input id="adminNumber" required inputmode="numeric" placeholder="201234567890"></label>
         <label>Role<select id="adminRole"></select></label>
-        <label>Linked IDs<input id="adminLids" placeholder="Optional, comma separated"></label>
         <label>Extra commands<input id="adminAllowed" placeholder="status, lock, approve-pending"></label>
         <label>Blocked commands<input id="adminDenied" placeholder="clear-group, remove"></label>
       </div>

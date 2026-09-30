@@ -3,6 +3,8 @@ const state = {
   commands: null,
   bot: { status: 'starting' },
   auth: { status: 'starting', qrDataUrl: null },
+  setup: { ownerConfigured: false, claimCode: null, expiresAt: null, owner: null },
+  setupFocused: false,
   lastShownQr: null,
   logs: []
 };
@@ -14,7 +16,7 @@ if (!window.studio) {
       admin: { label: 'Administrator', description: 'Daily group operations', allowedCommands: ['help', 'ping', 'status', 'lock'] },
       moderator: { label: 'Moderator', description: 'Basic moderation', allowedCommands: ['help', 'ping'] }
     },
-    admins: [{ id: 'preview', name: 'Primary owner', number: '201040224684', role: 'owner', enabled: true, lids: [], allowedCommands: [], deniedCommands: [] }],
+    admins: [],
     members: { enabled: true, allowedCommands: ['help', 'ping'] }
   };
   const sampleCommands = {
@@ -31,12 +33,19 @@ if (!window.studio) {
     }
   };
   window.studio = {
-    getState: async () => ({ bot: { status: 'ready', pid: 3184 }, logs: [{ at: new Date().toISOString(), source: 'bot', text: 'WhatsApp Admin Bot is ready.' }], autoStart: true }),
+    getState: async () => ({
+      bot: { status: 'ready', pid: 3184 },
+      auth: { status: 'ready', account: { name: 'Connected account', number: '201234567890' }, message: 'WhatsApp is connected.' },
+      setup: { ownerConfigured: false, claimCode: '482917', expiresAt: new Date(Date.now() + 600000).toISOString(), owner: null },
+      logs: [{ at: new Date().toISOString(), source: 'bot', text: 'WhatsApp Admin Bot is ready.' }],
+      autoStart: true
+    }),
     readConfig: async name => structuredClone(name === 'admins' ? sampleAdmins : sampleCommands),
     saveConfig: async (_, value) => value,
     startBot: async () => {}, stopBot: async () => {}, restartBot: async () => {},
+    renewOwnerClaim: async () => {}, resetWhatsAppSession: async () => {},
     setAutoStart: async value => value, openDashboard: async () => {}, openDataFolder: async () => {},
-    onStatus: () => {}, onLog: () => {}, onBotEvent: () => {}
+    onStatus: () => {}, onLog: () => {}, onBotEvent: () => {}, onSetup: () => {}
   };
 }
 
@@ -111,15 +120,54 @@ function renderAuth(auth = {}) {
   $('#loginEyebrow').textContent = ready ? 'CONNECTION' : 'WHATSAPP SETUP';
   $('#loginTitle').textContent = titles[status] || titleCase(status);
   $('#loginMessage').textContent = state.auth.message || 'Waiting for WhatsApp…';
+  const accountLabel = state.auth.account
+    ? [state.auth.account.name, state.auth.account.number ? `+${state.auth.account.number}` : ''].filter(Boolean).join(' · ')
+    : 'Not connected';
+  $('#connectedAccount').textContent = accountLabel;
   $('#showQr').disabled = !hasQr;
   $('#showQr').textContent = hasQr ? 'Show QR code' : ready ? 'Connected' : 'Waiting for QR…';
   $('#retryLogin').hidden = ready || hasQr || ['authenticated', 'loading'].includes(status);
+  $('#retryLogin').textContent = status === 'auth-failure' ? 'Reset session and show new QR' : 'Retry connection';
 
   if (hasQr && state.lastShownQr !== state.auth.qrDataUrl) {
     state.lastShownQr = state.auth.qrDataUrl;
     showQrDialog();
   }
   if (ready && $('#qrDialog').open) $('#qrDialog').close();
+}
+
+function renderSetup(setup = {}) {
+  state.setup = { ...state.setup, ...setup };
+  const panel = $('#ownerSetup');
+  panel.hidden = state.setup.ownerConfigured;
+  $('#ownerStatus').textContent = state.setup.ownerConfigured
+    ? `${state.setup.owner?.name || 'Owner'} configured`
+    : 'Owner not configured';
+  $('#claimCode').textContent = state.setup.claimCode || '------';
+  $('#claimCommand').textContent = state.setup.claimCode ? `!claim ${state.setup.claimCode}` : '!claim ------';
+  $('#copyClaim').disabled = !state.setup.claimCode;
+  $('#addAdmin').disabled = !state.setup.ownerConfigured;
+  $('#addAdmin').title = state.setup.ownerConfigured ? '' : 'Claim the Owner account first';
+  updateClaimCountdown();
+  if (!state.setup.ownerConfigured && state.setup.claimCode && !state.setupFocused) {
+    state.setupFocused = true;
+    requestAnimationFrame(() => panel.scrollIntoView({ block: 'start' }));
+  }
+}
+
+function updateClaimCountdown() {
+  const node = $('#claimExpiry');
+  if (!node || state.setup.ownerConfigured) return;
+  const remaining = Date.parse(state.setup.expiresAt || '') - Date.now();
+  if (!state.setup.claimCode || !Number.isFinite(remaining) || remaining <= 0) {
+    node.textContent = 'Code expired. Generate a new one.';
+    node.classList.add('expired');
+    return;
+  }
+  const minutes = Math.floor(remaining / 60000);
+  const seconds = Math.floor((remaining % 60000) / 1000);
+  node.textContent = `Expires in ${minutes}:${String(seconds).padStart(2, '0')}`;
+  node.classList.remove('expired');
 }
 
 function renderMetrics(autoStart) {
@@ -141,7 +189,7 @@ function renderAdmins() {
       <div class="admin-card-head"><div class="avatar">${initials}</div><span class="tag ${admin.enabled === false ? '' : 'role'}">${admin.enabled === false ? 'Disabled' : 'Active'}</span></div>
       <h3>${escapeHtml(admin.name || 'Unnamed')}</h3>
       <p>${escapeHtml(admin.number || 'No number')}</p>
-      <div class="tags"><span class="tag role">${escapeHtml(role.label || admin.role)}</span><span class="tag">${(admin.lids || []).length} LID</span><span class="tag">${(admin.allowedCommands || []).length} custom grants</span></div>
+      <div class="tags"><span class="tag role">${escapeHtml(role.label || admin.role)}</span><span class="tag">${(admin.allowedCommands || []).length} custom grants</span></div>
       <div class="card-actions"><button data-edit-admin="${admin.id}">Edit</button><button class="danger" data-delete-admin="${admin.id}">Delete</button></div>
     </article>`;
   }).join('') || '<div class="empty panel">No administrators configured.</div>';
@@ -205,7 +253,6 @@ function openAdmin(admin = {}) {
   $('#adminName').value = admin.name || '';
   $('#adminNumber').value = admin.number || '';
   $('#adminRole').value = admin.role || Object.keys(state.admins.roles)[0] || 'owner';
-  $('#adminLids').value = (admin.lids || []).join(', ');
   $('#adminAllowed').value = (admin.allowedCommands || []).join(', ');
   $('#adminDenied').value = (admin.deniedCommands || []).join(', ');
   $('#adminEnabled').checked = admin.enabled !== false;
@@ -228,8 +275,28 @@ function bindEvents() {
   $('#restartBot').addEventListener('click', async () => { await window.studio.restartBot(); toast('Bot restarted'); });
   $('#showQr').addEventListener('click', showQrDialog);
   $('#retryLogin').addEventListener('click', async () => {
+    if (state.auth.status === 'auth-failure') {
+      if (!confirm('The saved WhatsApp session was rejected. Remove it and connect again? Bot settings will be kept.')) return;
+      renderAuth({ status: 'starting', account: null, message: 'Removing the rejected session…', qrDataUrl: null });
+      await window.studio.resetWhatsAppSession();
+      return;
+    }
     renderAuth({ status: 'starting', message: 'Restarting the WhatsApp connection…', qrDataUrl: null });
     await window.studio.restartBot();
+  });
+  $('#copyClaim').addEventListener('click', async () => {
+    if (!state.setup.claimCode) return;
+    await navigator.clipboard.writeText(`!claim ${state.setup.claimCode}`);
+    toast('Owner command copied');
+  });
+  $('#renewClaim').addEventListener('click', async () => {
+    await window.studio.renewOwnerClaim();
+    toast('Generating a new owner code…');
+  });
+  $('#resetSession').addEventListener('click', async () => {
+    if (!confirm('Disconnect this WhatsApp account and generate a new QR code? Your bot settings will be kept.')) return;
+    renderAuth({ status: 'starting', account: null, message: 'Removing the saved session…', qrDataUrl: null });
+    await window.studio.resetWhatsAppSession();
   });
   $('#startBot').addEventListener('click', () => window.studio.startBot());
   $('#stopBot').addEventListener('click', () => window.studio.stopBot());
@@ -256,7 +323,7 @@ function bindEvents() {
     const previous = state.admins.admins.find(admin => admin.id === id) || {};
     const admin = {
       ...previous, id, name: $('#adminName').value.trim(), number: $('#adminNumber').value.replace(/\D/g, ''),
-      role: $('#adminRole').value, lids: $('#adminLids').value.split(',').map(value => value.replace(/\D/g, '')).filter(Boolean),
+      role: $('#adminRole').value, lids: previous.lids || [],
       enabled: $('#adminEnabled').checked,
       allowedCommands: $('#adminAllowed').value.split(',').map(value => value.trim().replace(/^[!/#.]+/, '')).filter(Boolean),
       deniedCommands: $('#adminDenied').value.split(',').map(value => value.trim().replace(/^[!/#.]+/, '')).filter(Boolean)
@@ -312,6 +379,7 @@ async function initialize() {
   state.logs = desktopState.logs || [];
   renderStatus(desktopState.bot);
   renderAuth(desktopState.auth);
+  renderSetup(desktopState.setup);
   renderMetrics(desktopState.autoStart);
   renderAdmins();
   renderPermissions();
@@ -335,10 +403,21 @@ async function initialize() {
     }
     if (event.type === 'authenticated') renderAuth({ status: 'authenticated', qrDataUrl: null, message: 'Login accepted. Loading your WhatsApp account…' });
     if (event.type === 'loading') renderAuth({ status: 'loading', qrDataUrl: null, message: event.message || 'Loading WhatsApp…' });
-    if (event.type === 'ready') renderAuth({ status: 'ready', qrDataUrl: null, message: 'WhatsApp is connected. Your saved session will be reused automatically.' });
+    if (event.type === 'ready') renderAuth({ status: 'ready', account: event.account || null, qrDataUrl: null, message: 'WhatsApp is connected. Your saved session will be reused automatically.' });
     if (event.type === 'auth-failure') renderAuth({ status: 'auth-failure', qrDataUrl: null, message: event.message || 'WhatsApp rejected the saved session. Try connecting again.' });
     if (event.type === 'disconnected') renderAuth({ status: 'disconnected', qrDataUrl: null, message: 'Connection lost. Studio is trying to reconnect…' });
   });
+  window.studio.onSetup(async setup => {
+    renderSetup(setup);
+    if (setup.ownerConfigured) {
+      state.admins = await window.studio.readConfig('admins');
+      renderAdmins();
+      renderPermissions();
+      renderMetrics($('#autoStart').checked);
+      toast('Owner setup completed');
+    }
+  });
+  setInterval(updateClaimCountdown, 1000);
 }
 
 initialize().catch(error => {
