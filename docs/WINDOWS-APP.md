@@ -48,7 +48,7 @@ npm run dist:win
 The installer is written to:
 
 ```text
-release/WhatsApp-Admin-Studio-Setup-3.0.0-beta.2.exe
+release/WhatsApp-Admin-Studio-Setup-0.1.0.exe
 ```
 
 The NSIS installer:
@@ -141,7 +141,7 @@ NSIS is the selected installer format because it supports the intended Windows i
 
 ## Slim packaging and OCR
 
-The `3.0.0-beta.2` build uses a production allow-list, ASAR packaging, maximum compression, and only the `en-US` Electron runtime locale. Documentation, tests, development files, duplicate WhatsApp runtimes, and unused application files are not packaged.
+The `0.1.0` build uses a production allow-list, ASAR packaging, maximum compression, and only the `en-US` Electron runtime locale. Documentation, tests, development files, duplicate WhatsApp runtimes, and unused application files are not packaged.
 
 OCR remains part of the Slim build:
 

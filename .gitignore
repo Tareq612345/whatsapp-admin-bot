@@ -1,6 +1,7 @@
 node_modules/
 release/
 dist/
+build/
 .ocr-venv/
 .wwebjs_auth/
 .wwebjs_cache/
