@@ -38,6 +38,7 @@ Inspect the current tree before relying on this summary.
 - `README.md`: public project landing page.
 - `docs/WINDOWS-APP.md`: desktop installation and operating guide.
 - `BOT-UNDERSTANDING.md`: behavior and architecture notes.
+- `AI-HANDOFF.md`: current operational state, unresolved manual checks, architecture constraints, and continuation plan.
 - `AI-CHANGELOG.md`: append-only record of AI-assisted changes and validation.
 
 If the tree differs, update this map in the same pull request.
@@ -46,7 +47,7 @@ If the tree differs, update this map in the same pull request.
 
 ### Before editing
 
-1. Read this file, the latest entries in `AI-CHANGELOG.md`, and the documentation relevant to the task.
+1. Read this file, `AI-HANDOFF.md`, the latest entries in `AI-CHANGELOG.md`, and the documentation relevant to the task.
 2. Inspect the implementation and its callers. Do not infer behavior from filenames or screenshots alone.
 3. Check recent commits, issues, and pull requests when they may explain an existing workaround or regression.
 4. State the smallest functional scope and its verification plan.

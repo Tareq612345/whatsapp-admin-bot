@@ -204,3 +204,19 @@ This append-only file records AI-assisted repository changes, their validation, 
   - Publication workflow: NOT RUN — runs after merge to `main`
 - **Result:** PARTIAL
 - **Known limitations/follow-up:** The installer remains unsigned until trusted signing credentials are connected. Real QR login requires the user's Windows and WhatsApp test.
+
+## 2026-10-02 — Add complete AI continuation handoff
+
+- **Agent/tool:** Notion AI with GitHub MCP and local documentation validation
+- **Request:** Record all implementation, release, testing, and continuation details so another AI can continue safely from GitHub.
+- **Branch/PR:** `main` / direct documentation handoff requested by maintainer
+- **Scope:** Added a current-state handoff covering beta.3, QR root cause and fix, architecture, persistent data, Claim/LID rules, lifecycle constraints, OCR, signing, manual QA, and release procedure; updated mandatory agent reading order. No application behavior or release artifact changed.
+- **Files:** `AI-HANDOFF.md`, `AGENTS.md`, `AI-CHANGELOG.md`
+- **Behavior:** Future AI agents now have one explicit operational handoff in addition to the canonical rules and append-only ledger.
+- **Validation:**
+  - `git diff --check`: PASS — no whitespace errors
+  - Referenced repository paths: PASS — verified against current `main`
+  - beta.3 release/tag/assets: PASS — previously verified on GitHub
+  - Runtime tests: NOT RUN — documentation-only change
+- **Result:** SUCCESS
+- **Known limitations/follow-up:** Real beta.3 WhatsApp QR login, persisted reconnect, Owner Claim, and live OCR still require the user's Windows/phone test.
