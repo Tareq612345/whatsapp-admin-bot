@@ -183,7 +183,7 @@ This append-only file records AI-assisted repository changes, their validation, 
   - `npm run check`: PASS — all application and desktop JavaScript passed syntax validation
   - `npm test`: PASS — 23 tests passed, including shared-data and isolated-profile regression tests
   - `git diff --check`: PASS — no whitespace errors
-  - Windows packaged validation: NOT RUN — requires GitHub Actions after the pull request is created
+  - GitHub `validate-windows` workflow: PASS — Windows installer build, OCR verification, and packaged restart smoke test completed successfully
   - Real WhatsApp QR login: NOT RUN — requires the user's Windows account and phone
 - **Result:** PARTIAL
-- **Known limitations/follow-up:** Publish a new beta only after Windows packaged validation passes. The installer remains unsigned until trusted signing credentials are connected.
+- **Known limitations/follow-up:** Real QR display still requires the user's WhatsApp account and phone. The installer remains unsigned until trusted signing credentials are connected.
