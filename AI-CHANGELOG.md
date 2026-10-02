@@ -89,3 +89,18 @@ This append-only file records AI-assisted repository changes, their validation, 
   - Publication workflow: NOT RUN — runs after merge to `main`
 - **Result:** PARTIAL
 - **Known limitations/follow-up:** Do not announce the release until the publication workflow succeeds and both installer and checksum appear on GitHub Releases.
+
+## 2026-10-02 — Confirm v0.2.0-beta.1 publication
+
+- **Agent/tool:** Notion AI with GitHub MCP and GitHub Actions
+- **Request:** Verify that the latest beta installer is available on GitHub Releases.
+- **Branch/PR:** `main` / follow-up to #15
+- **Scope:** Recorded the completed publication result only; no application or release artifact changed.
+- **Files:** `AI-CHANGELOG.md`
+- **Behavior:** The release page now contains the NSIS installer and SHA-256 checksum for `v0.2.0-beta.1`.
+- **Validation:**
+  - GitHub release tag: PASS — `v0.2.0-beta.1` is published as a pre-release
+  - Installer asset: PASS — `WhatsApp-Admin-Studio-Setup-0.2.0-beta.1.exe` is uploaded
+  - Checksum asset: PASS — `SHA256SUMS.txt` is uploaded
+- **Result:** SUCCESS
+- **Known limitations/follow-up:** Real WhatsApp QR, claim, restart, and upgrade behavior still requires the user's human test.
