@@ -136,3 +136,22 @@ This append-only file records AI-assisted repository changes, their validation, 
   - GitHub `validate-windows` workflow: PASS — Windows installer build, OCR verification, and packaged restart smoke test completed successfully
 - **Result:** PARTIAL
 - **Known limitations/follow-up:** The executable remains unsigned until a trusted certificate or signing-service account is connected. Real WhatsApp startup and log capture still require the user's Windows test.
+
+## 2026-10-02 — Prepare v0.2.0-beta.2 diagnostic release
+
+- **Agent/tool:** Notion AI with GitHub MCP and GitHub Actions
+- **Request:** Publish the reviewed Claim timing and persistent-log fixes as a downloadable Windows beta for user testing.
+- **Branch/PR:** `release/v0.2.0-beta.2` / pending when this entry was written
+- **Scope:** Bumped package and lockfile versions, updated visible beta references, added focused release notes, and added a dedicated publication workflow; no additional runtime behavior changed.
+- **Files:** `package.json`, `package-lock.json`, `README.md`, `docs/WINDOWS-APP.md`, `release-notes/v0.2.0-beta.2.md`, `.github/workflows/publish-v0.2.0-beta.2.yml`, `AI-CHANGELOG.md`
+- **Behavior:** Merging the release pull request builds and publishes the beta.2 Installer and checksum.
+- **Validation:**
+  - Package/lockfile version match: PASS — both report `0.2.0-beta.2`
+  - Workflow YAML parse: PASS — publication workflow loaded successfully
+  - `npm run check`: PASS — all application and desktop JavaScript passed syntax validation
+  - `npm test`: PASS — 20 tests passed
+  - `git diff --check`: PASS — no whitespace errors
+  - GitHub `validate-windows` workflow: NOT RUN — runs after the pull request is opened
+  - Publication workflow: NOT RUN — runs after merge to `main`
+- **Result:** PARTIAL
+- **Known limitations/follow-up:** The executable remains unsigned until trusted signing credentials are connected. Real WhatsApp and log-file behavior require the user's Windows test.
