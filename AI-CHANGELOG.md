@@ -75,7 +75,7 @@ This append-only file records AI-assisted repository changes, their validation, 
 
 - **Agent/tool:** Notion AI with GitHub MCP and GitHub Actions
 - **Request:** Publish the current Owner-claim and persistent-session build as the latest downloadable Windows beta.
-- **Branch/PR:** `release/v0.2.0-beta.1` / pending when this entry was written
+- **Branch/PR:** `release/v0.2.0-beta.1` / #15
 - **Scope:** Bumped package and lockfile versions, updated visible version references, added beta release notes, and added a dedicated Windows publication workflow with source tests, packaged restart smoke testing, OCR verification, NSIS build, checksum, and GitHub pre-release publication; no runtime behavior changed.
 - **Files:** `package.json`, `package-lock.json`, `README.md`, `docs/WINDOWS-APP.md`, `release-notes/v0.2.0-beta.1.md`, `.github/workflows/publish-v0.2.0-beta.1.yml`, `AI-CHANGELOG.md`
 - **Behavior:** Merging the release pull request triggers creation of the `v0.2.0-beta.1` installer and checksum on GitHub Releases.
@@ -85,7 +85,7 @@ This append-only file records AI-assisted repository changes, their validation, 
   - `npm run check`: PASS — all application and desktop JavaScript passed syntax validation
   - `npm test`: PASS — 18 tests passed
   - `git diff --check`: PASS — no whitespace errors
-  - GitHub `validate-windows` workflow: NOT RUN — runs after the pull request is opened
+  - GitHub `validate-windows` workflow: PASS — Windows installer build, OCR verification, and packaged restart smoke test completed successfully
   - Publication workflow: NOT RUN — runs after merge to `main`
 - **Result:** PARTIAL
 - **Known limitations/follow-up:** Do not announce the release until the publication workflow succeeds and both installer and checksum appear on GitHub Releases.
