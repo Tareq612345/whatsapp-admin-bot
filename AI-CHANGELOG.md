@@ -155,3 +155,18 @@ This append-only file records AI-assisted repository changes, their validation, 
   - Publication workflow: NOT RUN — runs after merge to `main`
 - **Result:** PARTIAL
 - **Known limitations/follow-up:** The executable remains unsigned until trusted signing credentials are connected. Real WhatsApp and log-file behavior require the user's Windows test.
+
+## 2026-10-02 — Confirm v0.2.0-beta.2 publication
+
+- **Agent/tool:** Notion AI with GitHub MCP and GitHub Actions
+- **Request:** Verify that the Claim/logging diagnostic beta is downloadable for Windows testing.
+- **Branch/PR:** `main` / follow-up to #18
+- **Scope:** Recorded the completed publication result only; no runtime or release artifact changed.
+- **Files:** `AI-CHANGELOG.md`
+- **Behavior:** GitHub Releases now contains the beta.2 NSIS installer and checksum.
+- **Validation:**
+  - GitHub release tag: PASS — `v0.2.0-beta.2` is published as a pre-release
+  - Installer asset: PASS — `WhatsApp-Admin-Studio-Setup-0.2.0-beta.2.exe` is uploaded
+  - Checksum asset: PASS — `SHA256SUMS.txt` is uploaded
+- **Result:** SUCCESS
+- **Known limitations/follow-up:** The installer is still unsigned. The user's real WhatsApp test and resulting diagnostic log remain required.
