@@ -154,6 +154,17 @@ Run the strongest applicable level. A lower level never substitutes for a requir
 - Generate and publish the checksum with the installer.
 - Use semantic versioning. Keep early releases in the `0.x` series until the maintainer declares a stable `1.0.0`.
 
+> [!IMPORTANT]
+> **Windows release signing**
+>
+> - Sign future Windows installers and executable files with a trusted Authenticode code-signing identity when signing credentials are available.
+> - Never commit a certificate, private key, password, access token, or signing credential. Use GitHub Actions secrets or an approved OIDC-backed signing service.
+> - Timestamp every production signature so it remains valid after certificate expiry.
+> - Verify the final published artifact with `Get-AuthenticodeSignature`; the required status is `Valid`.
+> - Record the signer subject, timestamp result, verification command, and artifact digest in `AI-CHANGELOG.md`. Never record secret values.
+> - Do not describe an unsigned installer as signed. An unsigned beta must retain a clear SmartScreen warning in its release notes.
+> - Do not publish a stable release until signing succeeds, unless the human maintainer explicitly approves an unsigned exception.
+
 Record each check as `PASS`, `FAIL`, or `NOT RUN` with a reason. Never convert `NOT RUN` into “passed.”
 
 ## 10. Pull request and release expectations
