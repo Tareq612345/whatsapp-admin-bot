@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-admin-bot",
-  "version": "0.1.0",
+  "version": "0.2.0-beta.1",
   "private": true,
   "scripts": {
     "start": "node --require ./port-guard.js --require ./phone-resolver.js --require ./rapid-ocr.js --require ./student-gate.js bot.js",
