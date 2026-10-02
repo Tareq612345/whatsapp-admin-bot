@@ -900,10 +900,6 @@ if (process.env.BOT_DESKTOP_EVENTS === '1' && process.stdin) {
   });
 }
 
-ownerClaim.current();
-
-
-
 // LOCAL_DASHBOARD_BRIDGE
 startAdminDashboard({
   client,

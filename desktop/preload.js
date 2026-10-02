@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('studio', {
   setAutoStart: enabled => ipcRenderer.invoke('studio:set-auto-start', enabled),
   openDashboard: port => ipcRenderer.invoke('studio:open-dashboard', port),
   openDataFolder: () => ipcRenderer.invoke('studio:open-data-folder'),
+  openLogFolder: () => ipcRenderer.invoke('studio:open-log-folder'),
   onStatus: callback => ipcRenderer.on('bot-status', (_, payload) => callback(payload)),
   onLog: callback => ipcRenderer.on('bot-log', (_, payload) => callback(payload)),
   onBotEvent: callback => ipcRenderer.on('bot-event', (_, payload) => callback(payload)),

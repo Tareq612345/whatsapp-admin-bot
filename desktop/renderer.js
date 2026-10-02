@@ -38,13 +38,14 @@ if (!window.studio) {
       auth: { status: 'ready', account: { name: 'Connected account', number: '201234567890' }, message: 'WhatsApp is connected.' },
       setup: { ownerConfigured: false, claimCode: '482917', expiresAt: new Date(Date.now() + 600000).toISOString(), owner: null },
       logs: [{ at: new Date().toISOString(), source: 'bot', text: 'WhatsApp Admin Bot is ready.' }],
-      autoStart: true
+      autoStart: true,
+      paths: { logFile: 'C:\\Users\\Example\\AppData\\Roaming\\WhatsApp Admin Studio\\logs\\admin-studio.log' }
     }),
     readConfig: async name => structuredClone(name === 'admins' ? sampleAdmins : sampleCommands),
     saveConfig: async (_, value) => value,
     startBot: async () => {}, stopBot: async () => {}, restartBot: async () => {},
     renewOwnerClaim: async () => {}, resetWhatsAppSession: async () => {},
-    setAutoStart: async value => value, openDashboard: async () => {}, openDataFolder: async () => {},
+    setAutoStart: async value => value, openDashboard: async () => {}, openDataFolder: async () => {}, openLogFolder: async () => {},
     onStatus: () => {}, onLog: () => {}, onBotEvent: () => {}, onSetup: () => {}
   };
 }
@@ -75,7 +76,7 @@ function renderStatus(bot) {
   state.bot = bot;
   const status = bot.status || 'stopped';
   const ready = status === 'ready';
-  const error = ['error', 'stopped'].includes(status);
+  const error = ['error', 'stopped', 'login-timeout'].includes(status);
   $('#sidebarDot').className = `status-dot ${ready ? 'ready' : error ? 'error' : ''}`;
   $('#sidebarStatus').textContent = titleCase(status);
   $('#sidebarDetail').textContent = ready
@@ -113,6 +114,7 @@ function renderAuth(auth = {}) {
     ready: 'WhatsApp connected',
     disconnected: 'Connection interrupted',
     'auth-failure': 'Could not use the saved session',
+    'auth-timeout': 'WhatsApp did not finish starting',
     stopped: 'WhatsApp engine stopped'
   };
 
@@ -127,7 +129,14 @@ function renderAuth(auth = {}) {
   $('#showQr').disabled = !hasQr;
   $('#showQr').textContent = hasQr ? 'Show QR code' : ready ? 'Connected' : 'Waiting for QR…';
   $('#retryLogin').hidden = ready || hasQr || ['authenticated', 'loading'].includes(status);
-  $('#retryLogin').textContent = status === 'auth-failure' ? 'Reset session and show new QR' : 'Retry connection';
+  $('#retryLogin').textContent = ['auth-failure', 'auth-timeout'].includes(status)
+    ? 'Reset session and show new QR'
+    : 'Retry connection';
+  $('#renewClaim').disabled = !ready;
+  $('#renewClaim').title = ready ? '' : 'Connect WhatsApp before generating an Owner code';
+  if (!ready && !state.setup.ownerConfigured) {
+    $('#copyClaim').disabled = true;
+  }
 
   if (hasQr && state.lastShownQr !== state.auth.qrDataUrl) {
     state.lastShownQr = state.auth.qrDataUrl;
@@ -145,7 +154,7 @@ function renderSetup(setup = {}) {
     : 'Owner not configured';
   $('#claimCode').textContent = state.setup.claimCode || '------';
   $('#claimCommand').textContent = state.setup.claimCode ? `!claim ${state.setup.claimCode}` : '!claim ------';
-  $('#copyClaim').disabled = !state.setup.claimCode;
+  $('#copyClaim').disabled = !state.setup.claimCode || state.auth.status !== 'ready';
   $('#addAdmin').disabled = !state.setup.ownerConfigured;
   $('#addAdmin').title = state.setup.ownerConfigured ? '' : 'Claim the Owner account first';
   updateClaimCountdown();
@@ -160,7 +169,9 @@ function updateClaimCountdown() {
   if (!node || state.setup.ownerConfigured) return;
   const remaining = Date.parse(state.setup.expiresAt || '') - Date.now();
   if (!state.setup.claimCode || !Number.isFinite(remaining) || remaining <= 0) {
-    node.textContent = 'Code expired. Generate a new one.';
+    node.textContent = state.auth.status === 'ready'
+      ? 'Code unavailable or expired. Generate a new one.'
+      : 'Connect WhatsApp to generate the code.';
     node.classList.add('expired');
     return;
   }
@@ -275,7 +286,7 @@ function bindEvents() {
   $('#restartBot').addEventListener('click', async () => { await window.studio.restartBot(); toast('Bot restarted'); });
   $('#showQr').addEventListener('click', showQrDialog);
   $('#retryLogin').addEventListener('click', async () => {
-    if (state.auth.status === 'auth-failure') {
+    if (['auth-failure', 'auth-timeout'].includes(state.auth.status)) {
       if (!confirm('The saved WhatsApp session was rejected. Remove it and connect again? Bot settings will be kept.')) return;
       renderAuth({ status: 'starting', account: null, message: 'Removing the rejected session…', qrDataUrl: null });
       await window.studio.resetWhatsAppSession();
@@ -301,6 +312,7 @@ function bindEvents() {
   $('#startBot').addEventListener('click', () => window.studio.startBot());
   $('#stopBot').addEventListener('click', () => window.studio.stopBot());
   $('#openData').addEventListener('click', () => window.studio.openDataFolder());
+  $('#openLogs').addEventListener('click', () => window.studio.openLogFolder());
   $('#autoStart').addEventListener('change', async event => {
     const enabled = await window.studio.setAutoStart(event.target.checked);
     renderMetrics(enabled);
@@ -377,6 +389,7 @@ async function initialize() {
   state.admins = admins;
   state.commands = commands;
   state.logs = desktopState.logs || [];
+  $('#logPath').textContent = desktopState.paths?.logFile || 'Logs folder unavailable';
   renderStatus(desktopState.bot);
   renderAuth(desktopState.auth);
   renderSetup(desktopState.setup);
@@ -405,6 +418,7 @@ async function initialize() {
     if (event.type === 'loading') renderAuth({ status: 'loading', qrDataUrl: null, message: event.message || 'Loading WhatsApp…' });
     if (event.type === 'ready') renderAuth({ status: 'ready', account: event.account || null, qrDataUrl: null, message: 'WhatsApp is connected. Your saved session will be reused automatically.' });
     if (event.type === 'auth-failure') renderAuth({ status: 'auth-failure', qrDataUrl: null, message: event.message || 'WhatsApp rejected the saved session. Try connecting again.' });
+    if (event.type === 'auth-timeout') renderAuth({ status: 'auth-timeout', qrDataUrl: null, message: 'WhatsApp did not provide a QR or become ready. Reset the saved session to generate a fresh QR.' });
     if (event.type === 'disconnected') renderAuth({ status: 'disconnected', qrDataUrl: null, message: 'Connection lost. Studio is trying to reconnect…' });
   });
   window.studio.onSetup(async setup => {
