@@ -187,3 +187,20 @@ This append-only file records AI-assisted repository changes, their validation, 
   - Real WhatsApp QR login: NOT RUN — requires the user's Windows account and phone
 - **Result:** PARTIAL
 - **Known limitations/follow-up:** Real QR display still requires the user's WhatsApp account and phone. The installer remains unsigned until trusted signing credentials are connected.
+
+## 2026-10-02 — Prepare v0.2.0-beta.3 QR startup release
+
+- **Agent/tool:** Notion AI with GitHub MCP and GitHub Actions
+- **Request:** Build and publish the QR startup fix before the available automation limit expires.
+- **Branch/PR:** `release/v0.2.0-beta.3` / #20
+- **Scope:** Bumped the generated package metadata, updated visible beta references, added focused release notes, and added a dedicated beta.3 publication workflow; no additional runtime, OCR, or permission behavior changed.
+- **Files:** `package.json`, `package-lock.json`, `README.md`, `docs/WINDOWS-APP.md`, `release-notes/v0.2.0-beta.3.md`, `.github/workflows/publish-v0.2.0-beta.3.yml`, `AI-CHANGELOG.md`
+- **Behavior:** Merging the release pull request builds and publishes the beta.3 Windows installer and checksum.
+- **Validation:**
+  - Package/lockfile version match: PASS — both report `0.2.0-beta.3`
+  - `npm run check`: PASS — all application and desktop JavaScript passed syntax validation
+  - `npm test`: PASS — 23 tests passed
+  - GitHub `validate-windows` workflow: NOT RUN — pending pull request
+  - Publication workflow: NOT RUN — runs after merge to `main`
+- **Result:** PARTIAL
+- **Known limitations/follow-up:** The installer remains unsigned until trusted signing credentials are connected. Real QR login requires the user's Windows and WhatsApp test.
