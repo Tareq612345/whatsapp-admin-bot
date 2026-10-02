@@ -170,3 +170,20 @@ This append-only file records AI-assisted repository changes, their validation, 
   - Checksum asset: PASS — `SHA256SUMS.txt` is uploaded
 - **Result:** SUCCESS
 - **Known limitations/follow-up:** The installer is still unsigned. The user's real WhatsApp test and resulting diagnostic log remain required.
+
+## 2026-10-02 — Isolate the WhatsApp Electron host
+
+- **Agent/tool:** Notion AI with local validation
+- **Request:** Fix the packaged app remaining in Starting state without displaying the WhatsApp QR code.
+- **Branch/PR:** `fix/qr-electron-profile-isolation` / #19
+- **Scope:** Gave the hidden WhatsApp bot host its own Electron debugging profile while preserving the shared update-safe session, configuration, database, and log locations; stopped loading the Puppeteer bridge in the visible Studio process; made signature-check failures include sanitized PowerShell diagnostics. OCR and permissions were not changed.
+- **Files:** `desktop/main.js`, `lib/electron-profile.js`, `test/electron-profile.test.js`, `package.json`, `AI-CHANGELOG.md`
+- **Behavior:** Studio and the WhatsApp host no longer compete for the same `DevToolsActivePort`, allowing `wwebjs-electron` to attach to the correct hidden window and emit QR or ready events. Existing WhatsApp sessions remain in the same application-data folder across updates.
+- **Validation:**
+  - `npm run check`: PASS — all application and desktop JavaScript passed syntax validation
+  - `npm test`: PASS — 23 tests passed, including shared-data and isolated-profile regression tests
+  - `git diff --check`: PASS — no whitespace errors
+  - GitHub `validate-windows` workflow: PASS — Windows installer build, OCR verification, and packaged restart smoke test completed successfully
+  - Real WhatsApp QR login: NOT RUN — requires the user's Windows account and phone
+- **Result:** PARTIAL
+- **Known limitations/follow-up:** Real QR display still requires the user's WhatsApp account and phone. The installer remains unsigned until trusted signing credentials are connected.

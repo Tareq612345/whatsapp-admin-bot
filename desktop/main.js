@@ -1,8 +1,19 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
-require('wwebjs-electron');
-const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { spawn } = require('child_process');
+const { botHostProfileRoot, runtimeDataRoot } = require('../lib/electron-profile');
+
+const isBotHost = process.argv.includes('--bot-host');
+const sharedRuntimeRoot = runtimeDataRoot(process.env.BOT_DATA_DIR, app.getPath('userData'));
+if (isBotHost) {
+  const electronProfile = botHostProfileRoot(sharedRuntimeRoot);
+  app.setPath('userData', electronProfile);
+  fs.rmSync(path.join(electronProfile, 'DevToolsActivePort'), { force: true });
+  // Only the hidden WhatsApp host needs Puppeteer's Electron bridge. Loading
+  // it in Studio too creates a competing DevToolsActivePort endpoint.
+  require('wwebjs-electron');
+}
 const QRCode = require('qrcode');
 const { createLineDecoder } = require('../lib/desktop-events');
 const { removeWhatsAppSession, whatsappSessionPaths } = require('../lib/session-data');
@@ -29,7 +40,6 @@ let setupState = {
   owner: null
 };
 const logs = [];
-const isBotHost = process.argv.includes('--bot-host');
 const isSmokeTest = process.argv.includes('--smoke-test');
 const isSmokeChild = process.argv.includes('--smoke-child');
 
@@ -44,7 +54,9 @@ function processWorkingDirectory() {
 }
 
 function dataPaths() {
-  const dataRoot = app.getPath('userData');
+  // BOT_DATA_DIR deliberately remains the shared, update-safe Studio data
+  // directory even though the bot host has an isolated Electron profile.
+  const dataRoot = runtimeDataRoot(process.env.BOT_DATA_DIR, app.getPath('userData'));
   const session = whatsappSessionPaths(dataRoot);
   const logsRoot = path.join(dataRoot, 'logs');
   return {
@@ -279,8 +291,9 @@ function startEmbeddedBotHost() {
   }
   process.env.BOT_ELECTRON_HOST = '1';
   process.env.BOT_DESKTOP_EVENTS = '1';
-  process.env.BOT_DATA_DIR = dataPaths().dataRoot;
-  process.env.BOT_CONFIG_DIR = dataPaths().configRoot;
+  process.env.BOT_DATA_DIR ||= dataPaths().dataRoot;
+  process.env.BOT_CONFIG_DIR ||= dataPaths().configRoot;
+  console.log('[desktop-host] Isolated Electron debugging profile enabled.');
   process.env.BOT_OCR_WORKER = app.isPackaged
     ? path.join(process.resourcesPath, 'app.asar.unpacked', 'ocr', 'rapid_worker.py')
     : path.join(projectRoot(), 'ocr', 'rapid_worker.py');
@@ -308,21 +321,27 @@ function verifyExecutableSignature() {
   const executable = app.getPath('exe').replace(/'/g, "''");
   const command = [
     `$signature = Get-AuthenticodeSignature -LiteralPath '${executable}'`,
-    '[pscustomobject]@{',
-    'Status = $signature.Status.ToString();',
-    'Signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { $null };',
-    'Timestamp = if ($signature.TimeStamperCertificate) { $signature.TimeStamperCertificate.Subject } else { $null }',
-    '} | ConvertTo-Json -Compress'
-  ].join(' ');
+    "$signer = if ($null -ne $signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { '' }",
+    "$timestamp = if ($null -ne $signature.TimeStamperCertificate) { $signature.TimeStamperCertificate.Subject } else { '' }",
+    '[pscustomobject]@{ Status = [string]$signature.Status; Signer = $signer; Timestamp = $timestamp } | ConvertTo-Json -Compress'
+  ].join('; ');
   const check = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], {
     cwd: processWorkingDirectory(),
     windowsHide: true
   });
   let output = '';
+  let errorOutput = '';
   check.stdout.on('data', chunk => { output += chunk.toString(); });
+  check.stderr.on('data', chunk => { errorOutput += chunk.toString(); });
   check.on('error', error => addLog('signature', `Could not inspect executable signature: ${error.message}`));
   check.on('exit', code => {
-    if (code !== 0) return addLog('signature', `Executable signature check exited with code ${code}.`);
+    if (code !== 0) {
+      const detail = sanitizeLogText(errorOutput.trim());
+      return addLog(
+        'signature',
+        `Executable signature check exited with code ${code}${detail ? `: ${detail}` : '.'}`
+      );
+    }
     try {
       const result = JSON.parse(output);
       addLog(
