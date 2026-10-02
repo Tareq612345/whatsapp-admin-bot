@@ -104,3 +104,17 @@ This append-only file records AI-assisted repository changes, their validation, 
   - Checksum asset: PASS — `SHA256SUMS.txt` is uploaded
 - **Result:** SUCCESS
 - **Known limitations/follow-up:** Real WhatsApp QR, claim, restart, and upgrade behavior still requires the user's human test.
+
+## 2026-10-02 — Require signing for future Windows releases
+
+- **Agent/tool:** Notion AI with GitHub MCP
+- **Request:** Ensure future agents sign Windows releases and keep a durable record of completed work for handoff.
+- **Branch/PR:** `docs/windows-signing-requirement` / pending when this entry was written
+- **Scope:** Added a prominent Windows Authenticode policy covering secret handling, timestamping, signature verification, stable-release gating, and change-ledger evidence; no runtime or release artifact changed.
+- **Files:** `AGENTS.md`, `AI-CHANGELOG.md`
+- **Behavior:** Future supported agents must attempt trusted Windows signing when credentials are available and must never claim that an unsigned installer is signed.
+- **Validation:**
+  - `git diff --check -- AGENTS.md AI-CHANGELOG.md`: PASS — no whitespace errors
+  - Runtime tests: NOT RUN — documentation/instruction-only change
+- **Result:** SUCCESS
+- **Known limitations/follow-up:** A trusted signing certificate or approved signing-service account still needs to be obtained and connected to GitHub Actions.
