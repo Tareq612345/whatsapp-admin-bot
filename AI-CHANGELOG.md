@@ -141,7 +141,7 @@ This append-only file records AI-assisted repository changes, their validation, 
 
 - **Agent/tool:** Notion AI with GitHub MCP and GitHub Actions
 - **Request:** Publish the reviewed Claim timing and persistent-log fixes as a downloadable Windows beta for user testing.
-- **Branch/PR:** `release/v0.2.0-beta.2` / pending when this entry was written
+- **Branch/PR:** `release/v0.2.0-beta.2` / #18
 - **Scope:** Bumped package and lockfile versions, updated visible beta references, added focused release notes, and added a dedicated publication workflow; no additional runtime behavior changed.
 - **Files:** `package.json`, `package-lock.json`, `README.md`, `docs/WINDOWS-APP.md`, `release-notes/v0.2.0-beta.2.md`, `.github/workflows/publish-v0.2.0-beta.2.yml`, `AI-CHANGELOG.md`
 - **Behavior:** Merging the release pull request builds and publishes the beta.2 Installer and checksum.
@@ -151,7 +151,7 @@ This append-only file records AI-assisted repository changes, their validation, 
   - `npm run check`: PASS — all application and desktop JavaScript passed syntax validation
   - `npm test`: PASS — 20 tests passed
   - `git diff --check`: PASS — no whitespace errors
-  - GitHub `validate-windows` workflow: NOT RUN — runs after the pull request is opened
+  - GitHub `validate-windows` workflow: PASS — Windows installer build, OCR verification, and packaged restart smoke test completed successfully
   - Publication workflow: NOT RUN — runs after merge to `main`
 - **Result:** PARTIAL
 - **Known limitations/follow-up:** The executable remains unsigned until trusted signing credentials are connected. Real WhatsApp and log-file behavior require the user's Windows test.
