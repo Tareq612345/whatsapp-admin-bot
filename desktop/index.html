@@ -74,7 +74,7 @@
           <div>
             <p class="eyebrow">REQUIRED · FINAL SETUP STEP</p>
             <h3>Claim the owner account</h3>
-            <p>Send the one-time command from the WhatsApp account that should control administrator commands. Studio records the phone identity and internal LID automatically.</p>
+            <p>Connect WhatsApp first. Studio will then show the exact one-time <code>!claim 123456</code> command to send from the account that should control administrator commands.</p>
           </div>
           <span class="setup-status" id="ownerStatus">Owner not configured</span>
         </div>
@@ -87,7 +87,7 @@
           <ol class="claim-steps">
             <li><span>1</span><div><strong>Connect WhatsApp</strong><small>Complete the QR login above.</small></div></li>
             <li><span>2</span><div><strong>Open a group containing the bot</strong><small>Use the WhatsApp account that will become Owner.</small></div></li>
-            <li><span>3</span><div><strong>Send this exact command</strong><code id="claimCommand">!claim ------</code></div></li>
+            <li><span>3</span><div><strong>Send this exact command</strong><code id="claimCommand">!claim ------</code><small>Do not send only the six digits.</small></div></li>
           </ol>
         </div>
         <div class="setup-actions">
@@ -155,6 +155,7 @@
         <article class="panel setting-card"><div><h3>Local data</h3><p>Open configuration, session, database, and export files.</p></div><button class="button secondary" id="openData">Open folder</button></article>
         <article class="panel setting-card danger"><div><h3>Bot process</h3><p>Stop or restart the WhatsApp engine without closing Studio.</p></div><div><button class="button secondary" id="stopBot">Stop</button> <button class="button primary" id="startBot">Start</button></div></article>
         <article class="panel setting-card"><div><h3>WhatsApp account</h3><p id="connectedAccount">Not connected</p><p>Disconnect only when changing the bot account or repairing a rejected session.</p></div><button class="button secondary danger-button" id="resetSession">Disconnect and show new QR</button></article>
+        <article class="panel setting-card log-card"><div><h3>Diagnostic logs</h3><p>Use this file when reporting startup, QR, Claim, restart, OCR, or signature problems.</p><code id="logPath">Preparing log path…</code></div><button class="button secondary" id="openLogs">Open logs folder</button></article>
       </div>
       <div class="panel global-replies">
         <div class="panel-head"><div><h3>Global command messages</h3><p>Used for unknown, disabled, or unauthorized commands.</p></div><button class="button secondary" id="saveGlobals">Save messages</button></div>

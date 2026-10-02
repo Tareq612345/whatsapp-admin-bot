@@ -6,12 +6,15 @@ const path = require('path');
 const QRCode = require('qrcode');
 const { createLineDecoder } = require('../lib/desktop-events');
 const { removeWhatsAppSession, whatsappSessionPaths } = require('../lib/session-data');
+const { FileLogger, sanitizeLogText } = require('../lib/file-logger');
 
 let mainWindow;
 let whatsappWindow;
 let botProcess;
 let botStartPromise;
 let botHostLock;
+let botStartupTimer;
+let fileLogger;
 let botState = { status: 'stopped', pid: null, startedAt: null, lastExit: null };
 let authState = {
   status: 'starting',
@@ -43,11 +46,14 @@ function processWorkingDirectory() {
 function dataPaths() {
   const dataRoot = app.getPath('userData');
   const session = whatsappSessionPaths(dataRoot);
+  const logsRoot = path.join(dataRoot, 'logs');
   return {
     dataRoot,
     configRoot: path.join(dataRoot, 'config'),
     admins: path.join(dataRoot, 'config', 'admins.json'),
     commands: path.join(dataRoot, 'config', 'commands.json'),
+    logsRoot,
+    logFile: path.join(logsRoot, 'admin-studio.log'),
     whatsappSession: session.auth,
     whatsappCache: session.cache
   };
@@ -56,6 +62,7 @@ function dataPaths() {
 function ensureUserFiles() {
   const paths = dataPaths();
   fs.mkdirSync(paths.configRoot, { recursive: true });
+  fs.mkdirSync(paths.logsRoot, { recursive: true });
   for (const name of ['admins.json', 'commands.json']) {
     const target = path.join(paths.configRoot, name);
     if (!fs.existsSync(target)) fs.copyFileSync(path.join(projectRoot(), 'config', name), target);
@@ -151,8 +158,14 @@ function send(channel, payload) {
 }
 
 function addLog(source, text) {
-  const entry = { at: new Date().toISOString(), source, text: String(text).trimEnd() };
+  const entry = { at: new Date().toISOString(), source, text: sanitizeLogText(text).trimEnd() };
   if (!entry.text) return;
+  try {
+    fileLogger ||= new FileLogger(dataPaths().logFile);
+    fileLogger.write(source, entry.text, entry.at);
+  } catch (error) {
+    console.error(`Could not write diagnostic log: ${error.message}`);
+  }
   logs.push(entry);
   if (logs.length > 1000) logs.splice(0, logs.length - 1000);
   send('bot-log', entry);
@@ -167,12 +180,20 @@ function setAuthState(status, updates = {}) {
   };
 }
 
+function clearBotStartupTimer() {
+  if (botStartupTimer) clearTimeout(botStartupTimer);
+  botStartupTimer = null;
+}
+
 async function processDesktopEvent(line) {
   const marker = '[desktop-event] ';
   const index = line.indexOf(marker);
   if (index < 0) return;
   try {
     const event = JSON.parse(line.slice(index + marker.length));
+    if (['qr', 'authenticated', 'loading', 'ready', 'auth-failure'].includes(event.type)) {
+      clearBotStartupTimer();
+    }
     if (event.type === 'qr') {
       event.dataUrl = await QRCode.toDataURL(event.value, { width: 320, margin: 2 });
       botState.status = 'waiting-login';
@@ -180,6 +201,7 @@ async function processDesktopEvent(line) {
         qrDataUrl: event.dataUrl,
         message: 'Scan the QR code with the WhatsApp account that will run the bot.'
       });
+      addLog('auth', 'WhatsApp QR code generated and displayed in Studio.');
     }
     if (event.type === 'authenticated') {
       botState.status = 'connecting';
@@ -187,6 +209,7 @@ async function processDesktopEvent(line) {
         qrDataUrl: null,
         message: 'Login accepted. Loading your WhatsApp account…'
       });
+      addLog('auth', 'WhatsApp accepted the login.');
     }
     if (event.type === 'loading') {
       botState.status = 'connecting';
@@ -195,6 +218,7 @@ async function processDesktopEvent(line) {
         percent: event.percent,
         message: event.message || 'Loading WhatsApp…'
       });
+      addLog('auth', `WhatsApp loading ${event.percent || 0}% ${event.message || ''}`.trim());
     }
     if (event.type === 'ready') {
       botState.status = 'ready';
@@ -204,6 +228,7 @@ async function processDesktopEvent(line) {
         account: event.account || null,
         message: 'WhatsApp is connected. Your saved session will be reused automatically.'
       });
+      addLog('auth', `WhatsApp connected${event.account?.name ? ` as ${event.account.name}` : ''}.`);
     }
     if (event.type === 'auth-failure') {
       botState.status = 'error';
@@ -211,6 +236,7 @@ async function processDesktopEvent(line) {
         qrDataUrl: null,
         message: event.message || 'WhatsApp rejected the saved session. Try connecting again.'
       });
+      addLog('error', `WhatsApp authentication failed: ${event.message || 'unknown reason'}`);
     }
     if (event.type === 'disconnected') {
       botState.status = 'reconnecting';
@@ -218,6 +244,7 @@ async function processDesktopEvent(line) {
         qrDataUrl: null,
         message: `Connection lost${event.reason ? `: ${event.reason}` : ''}. Reconnecting…`
       });
+      addLog('auth', `WhatsApp disconnected: ${event.reason || 'unknown reason'}`);
     }
     if (event.type === 'owner-claim-required') {
       setSetupState({
@@ -226,6 +253,7 @@ async function processDesktopEvent(line) {
         claimCode: event.code,
         expiresAt: event.expiresAt
       });
+      addLog('setup', `Owner claim is required. Code expires at ${event.expiresAt}.`);
     }
     if (event.type === 'owner-claimed') {
       setSetupState({
@@ -234,6 +262,7 @@ async function processDesktopEvent(line) {
         claimCode: null,
         expiresAt: null
       });
+      addLog('setup', `Owner claim completed${event.owner?.name ? ` for ${event.owner.name}` : ''}.`);
     }
     send('bot-event', event);
     send('bot-status', botState);
@@ -274,6 +303,38 @@ function startEmbeddedBotHost() {
   require(path.join(root, 'bot.js'));
 }
 
+function verifyExecutableSignature() {
+  if (process.platform !== 'win32' || !app.isPackaged) return;
+  const executable = app.getPath('exe').replace(/'/g, "''");
+  const command = [
+    `$signature = Get-AuthenticodeSignature -LiteralPath '${executable}'`,
+    '[pscustomobject]@{',
+    'Status = $signature.Status.ToString();',
+    'Signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { $null };',
+    'Timestamp = if ($signature.TimeStamperCertificate) { $signature.TimeStamperCertificate.Subject } else { $null }',
+    '} | ConvertTo-Json -Compress'
+  ].join(' ');
+  const check = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], {
+    cwd: processWorkingDirectory(),
+    windowsHide: true
+  });
+  let output = '';
+  check.stdout.on('data', chunk => { output += chunk.toString(); });
+  check.on('error', error => addLog('signature', `Could not inspect executable signature: ${error.message}`));
+  check.on('exit', code => {
+    if (code !== 0) return addLog('signature', `Executable signature check exited with code ${code}.`);
+    try {
+      const result = JSON.parse(output);
+      addLog(
+        'signature',
+        `Executable signature status=${result.Status}; signer=${result.Signer || 'none'}; timestamp=${result.Timestamp || 'none'}`
+      );
+    } catch (error) {
+      addLog('signature', `Could not parse executable signature result: ${error.message}`);
+    }
+  });
+}
+
 async function startBot() {
   if (botProcess) return botState;
   if (botStartPromise) return botStartPromise;
@@ -302,14 +363,34 @@ async function startBot() {
     botProcess = child;
     botState.pid = child.pid;
     send('bot-status', botState);
+    clearBotStartupTimer();
+    botStartupTimer = setTimeout(() => {
+      if (!botProcess || !['starting', 'connecting'].includes(botState.status)) return;
+      botState.status = 'login-timeout';
+      setAuthState('auth-timeout', {
+        qrDataUrl: null,
+        message: 'WhatsApp did not provide a QR or become ready. Reset the saved session to generate a fresh QR.'
+      });
+      addLog('error', 'WhatsApp startup timed out before QR or ready state.');
+      send('bot-status', botState);
+      send('bot-event', { type: 'auth-timeout' });
+    }, 45_000);
+    botStartupTimer.unref?.();
     const desktopEventDecoder = createLineDecoder(line => {
       processDesktopEvent(line);
       if (!line.includes('[desktop-event]')) addLog('bot', line);
     });
+    const stderrDecoder = createLineDecoder(line => {
+      const expectedRuntimeMessage =
+        line.startsWith('DevTools listening on ') ||
+        line.includes('ExperimentalWarning: SQLite') ||
+        line.includes('--trace-warnings');
+      addLog(expectedRuntimeMessage ? 'runtime' : 'error', line);
+    });
     child.stdout.on('data', chunk => {
       desktopEventDecoder.push(chunk);
     });
-    child.stderr.on('data', chunk => addLog('error', chunk.toString()));
+    child.stderr.on('data', chunk => stderrDecoder.push(chunk));
     child.on('error', error => {
       addLog('desktop', error.stack || error.message);
       if (botProcess === child) botProcess = null;
@@ -319,6 +400,8 @@ async function startBot() {
     });
     child.on('exit', (code, signal) => {
       desktopEventDecoder.flush();
+      stderrDecoder.flush();
+      clearBotStartupTimer();
       if (botProcess !== child) return;
       botState = { ...botState, status: 'stopped', pid: null, lastExit: { code, signal, at: new Date().toISOString() } };
       if (authState.status !== 'ready') {
@@ -340,6 +423,7 @@ async function startBot() {
 }
 
 async function stopBot() {
+  clearBotStartupTimer();
   if (!botProcess) return botState;
   const processToStop = botProcess;
   botState.status = 'stopping';
@@ -483,6 +567,10 @@ if (!isBotHost && !isSmokeTest && !isSmokeChild) {
 
 app.whenReady().then(() => {
   ensureUserFiles();
+  if (!isBotHost && !isSmokeTest && !isSmokeChild) {
+    addLog('studio', `WhatsApp Admin Studio ${app.getVersion()} started.`);
+    verifyExecutableSignature();
+  }
   if (isSmokeChild) {
     runSmokeChild();
     return;
@@ -551,3 +639,12 @@ ipcMain.handle('studio:set-auto-start', (_, enabled) => {
 });
 ipcMain.handle('studio:open-dashboard', (_, port) => shell.openExternal(`http://127.0.0.1:${Number(port) === 3001 ? 3001 : 3000}`));
 ipcMain.handle('studio:open-data-folder', () => shell.openPath(dataPaths().dataRoot));
+ipcMain.handle('studio:open-log-folder', () => {
+  const paths = dataPaths();
+  fs.mkdirSync(paths.logsRoot, { recursive: true });
+  if (fs.existsSync(paths.logFile)) {
+    shell.showItemInFolder(paths.logFile);
+    return paths.logFile;
+  }
+  return shell.openPath(paths.logsRoot);
+});

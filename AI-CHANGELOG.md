@@ -118,3 +118,21 @@ This append-only file records AI-assisted repository changes, their validation, 
   - Runtime tests: NOT RUN — documentation/instruction-only change
 - **Result:** SUCCESS
 - **Known limitations/follow-up:** A trusted signing certificate or approved signing-service account still needs to be obtained and connected to GitHub Actions.
+
+## 2026-10-02 — Fix Claim timing and add persistent diagnostic logs
+
+- **Agent/tool:** Notion AI with GitHub MCP and local validation
+- **Request:** Review the Owner-claim logic, show the complete command clearly, add a retrievable log file, and include signature diagnostics.
+- **Branch/PR:** `fix/claim-startup-and-persistent-logs` / #17
+- **Scope:** Delayed claim-code creation until WhatsApp is connected; clarified that the full `!claim 123456` command must be sent; added a 45-second startup timeout with safe session-reset guidance; added a rotating persistent log, Settings shortcut/path, claim/body redaction, expected-runtime warning classification, and Windows Authenticode status logging; no OCR or permission scope changed.
+- **Files:** `bot.js`, `desktop/main.js`, `desktop/preload.js`, `desktop/renderer.js`, `desktop/index.html`, `desktop/styles.css`, `lib/file-logger.js`, `test/file-logger.test.js`, `package.json`, `README.md`, `docs/WINDOWS-APP.md`, `AI-CHANGELOG.md`
+- **Behavior:** Owner codes appear only after a ready WhatsApp connection. Studio stores diagnostics at `%APPDATA%\WhatsApp Admin Studio\logs\admin-studio.log`, offers a direct folder button, redacts sensitive claim/message data, and records whether the installed executable is signed.
+- **Validation:**
+  - `npm run check`: PASS — all application and desktop JavaScript passed syntax validation
+  - `npm test`: PASS — 20 tests passed, including log redaction, persistence, and rotation
+  - `git diff --check`: PASS — no whitespace errors
+  - Claim visual QA at 1040×680: PASS — exact command and six-digit code are readable without overlap
+  - Settings visual QA at 1440×900: PASS — log path and folder action are visible and readable
+  - GitHub `validate-windows` workflow: PASS — Windows installer build, OCR verification, and packaged restart smoke test completed successfully
+- **Result:** PARTIAL
+- **Known limitations/follow-up:** The executable remains unsigned until a trusted certificate or signing-service account is connected. Real WhatsApp startup and log capture still require the user's Windows test.

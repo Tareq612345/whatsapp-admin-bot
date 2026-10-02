@@ -143,11 +143,27 @@ New installations start with no owner identity. Studio generates a six-digit com
 
 Send the command from the intended owner's WhatsApp account in a group containing the bot. The bot captures the sender's verified phone identity and internal WhatsApp LID automatically. The LID is never requested from the user or shown in the interface. The claim works once, is invalidated immediately after success, and is excluded from the activity log.
 
+The claim code is generated only after WhatsApp reaches **Connected**. Studio displays both the six-digit value and the complete command, for example `!claim 482917`; sending only the digits does not complete setup.
+
 Privileged commands remain blocked until the owner claim succeeds. A previously seeded placeholder owner from an older desktop build is removed during migration and must be claimed properly.
 
 ## Change or repair the WhatsApp account
 
 Use **Settings → WhatsApp account → Disconnect and show new QR** to stop the bot, remove only the saved WhatsApp session/cache, and start a fresh QR login. Administrators, commands, Student Gate data, and other settings are preserved.
+
+If WhatsApp provides neither a QR nor a ready state within 45 seconds, Studio changes to a timeout state and offers the same safe reset action.
+
+## Diagnostic log file
+
+Studio writes a persistent diagnostic log to:
+
+```text
+%APPDATA%\WhatsApp Admin Studio\logs\admin-studio.log
+```
+
+Open it from **Settings → Diagnostic logs → Open logs folder**. The log records startup, bot output, QR/authentication state transitions, Owner setup results, process exits, and Windows executable-signature status. QR payloads, six-digit claim codes, and incoming message bodies are redacted. The file rotates to `admin-studio.log.1` at approximately 5 MB.
+
+When reporting a problem, close Studio after reproducing it and send `admin-studio.log` (and `.1` when present).
 
 ## Before public distribution
 

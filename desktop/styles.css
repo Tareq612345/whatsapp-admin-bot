@@ -175,6 +175,7 @@ code { font-family: Consolas, monospace; }
 .settings-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-bottom: 16px; }
 .setting-card { display: flex; min-height: 150px; flex-direction: column; justify-content: space-between; }
 .setting-card.danger { border-color: #f0cfcb; }
+.log-card code { display: block; margin-top: 10px; color: var(--muted); overflow-wrap: anywhere; font-size: 12px; }
 .global-replies .form-grid { margin-top: 18px; }
 .form-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 14px; }
 dialog { width: min(650px, calc(100vw - 48px)); border: 1px solid var(--border); border-radius: 14px; padding: 24px; box-shadow: 0 24px 80px rgba(0,0,0,.22); }

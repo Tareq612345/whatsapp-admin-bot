@@ -111,6 +111,8 @@ The bot records the verified phone identity and any internal WhatsApp LID automa
 
 Additional administrators can be added from **Administrators** after the owner claim is complete. Administrator settings reload automatically.
 
+The claim code appears only after WhatsApp is connected. Send the full command shown by Studio (for example, `!claim 482917`), not the six digits by themselves.
+
 ## First-time setup
 
 1. Start Studio and scan the WhatsApp QR code.
