@@ -175,7 +175,7 @@ This append-only file records AI-assisted repository changes, their validation, 
 
 - **Agent/tool:** Notion AI with local validation
 - **Request:** Fix the packaged app remaining in Starting state without displaying the WhatsApp QR code.
-- **Branch/PR:** `fix/qr-electron-profile-isolation` / not created
+- **Branch/PR:** `fix/qr-electron-profile-isolation` / #19
 - **Scope:** Gave the hidden WhatsApp bot host its own Electron debugging profile while preserving the shared update-safe session, configuration, database, and log locations; stopped loading the Puppeteer bridge in the visible Studio process; made signature-check failures include sanitized PowerShell diagnostics. OCR and permissions were not changed.
 - **Files:** `desktop/main.js`, `lib/electron-profile.js`, `test/electron-profile.test.js`, `package.json`, `AI-CHANGELOG.md`
 - **Behavior:** Studio and the WhatsApp host no longer compete for the same `DevToolsActivePort`, allowing `wwebjs-electron` to attach to the correct hidden window and emit QR or ready events. Existing WhatsApp sessions remain in the same application-data folder across updates.
